@@ -157,6 +157,9 @@ static u8* module_mem1(HMODULE lib) {
     return ram;
 }
 
+/* The cycle observation suffix is dead after an access to RAM: since
+ * scripts/windows/lean_memory.py the translation stores it only on the way
+ * to an MMIO or timebase handler, its only readers. It is not compared. */
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: native_skin_test MODULE.dll [CASES]\n");
@@ -214,6 +217,7 @@ int main(int argc, char** argv) {
         }
         ran++;
         reference.ram = native.ram;
+        reference.cycle_observation_suffix = native.cycle_observation_suffix;
         if (memcmp(&native, &reference, sizeof native) != 0 || memcmp(native_ram, reference_ram, RAM_SIZE) != 0) {
             fprintf(stderr, "case %u (seed %08X): mismatch\n", i, seed);
             for (unsigned b = 0; b < sizeof native; ++b)

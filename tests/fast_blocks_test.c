@@ -210,6 +210,9 @@ static void run(Module* m, CPUState* state) {
     *state = *m->cpu;
 }
 
+/* The cycle observation suffix is dead after an access to RAM: since
+ * scripts/windows/lean_memory.py the translation stores it only on the way
+ * to an MMIO or timebase handler, its only readers. It is not compared. */
 int main(int argc, char** argv) {
     if (argc < 3) {
         fprintf(stderr, "usage: fast_blocks_test ORIGINAL.dll TRANSFORMED.dll [CASES]\n");
@@ -237,6 +240,7 @@ int main(int argc, char** argv) {
         run(&a, &sa);
         run(&b, &sb);
         sb.ram = sa.ram;
+        sb.cycle_observation_suffix = sa.cycle_observation_suffix;
         if (memcmp(&sa, &sb, sizeof sa) != 0 || memcmp(ram_a, ram_b, RAM_SIZE) != 0) {
             fprintf(stderr, "case %u (%08X, seed %08X): the copies differ (fpr at %u, ps1 at %u)\n", i,
                     ENTRIES[which], seed, (unsigned)offsetof(CPUState, fpr), (unsigned)offsetof(CPUState, ps1));

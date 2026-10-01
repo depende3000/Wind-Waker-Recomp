@@ -416,6 +416,17 @@ interpolation off, 1-5 percent faster (31.0 and 31.9 game FPS standing and runni
 Not for speed: **Match the display** shows the display's rate in steps of 30, up to 240. The buffers start
 where 60 and 120 used them and grow only as a frame needs. See [WINDOWS.md](WINDOWS.md).
 
+### 29. Guest loads and stores inline (gather_pipe.h, scripts/windows/lean_memory.py)
+
+clang had stopped inlining gather_pipe.h's guest memory wrappers into the chunks (each chunk is one huge
+function): every guest load and store was a call into a helper with its own frame, and the guest registers
+went back to the CPU state around each. Ordinary MEM1 is now inline and forced, the rest the old wrapper out
+of line. In the prepaid copies a plain access no longer stores its pc and cycle suffix first (only an MMIO
+handler reads them; the out-of-line path stores them). On 4 E-cores, game-thread CPU per game frame 26.3-26.6
+ms before, 23.6-24.2 after; frames identical. Tried and dropped (slower or larger): a one-test block entry,
+the return dispatch through a label table, and gating the deadline test on the out-of-line path. Details in
+[status/CURRENT.md](status/CURRENT.md), 2026-10-01.
+
 ## Finding slow spots
 
 | Tool | What it shows |

@@ -1,3 +1,82 @@
+## 2026-10-01 Guest loads and stores inline: about 10 percent less game-thread CPU
+
+The request after the low-end work (below): native versions of the collision and animation loops, and keep
+going until performance is significantly better. Before writing any, the game thread was measured on 4 of
+the i9's E-cores (`0x000F0000`, the stand-in for a 4-core laptop), running on Outset:
+
+- **What the time is.** An inclusive guest profile (a sampler that walks the guest's PowerPC back chain in
+  guest RAM) puts drawing at 42 percent of the game thread (J3D model drawing 19, `J3DSys::reinitGX` 6, mostly
+  for shadows), actor logic at 23, collision (`dBgS_Acch::CrrPos`) 6 and J3D animation 6-10. The guest
+  audio thread is 7. By function the profile is flat: the top function (`calcWeightEnvelopeMtx`) is 1.7
+  percent, the collision family about 10 percent together.
+- **Where the host time goes.** A copy of the module with line tables (the same code; `-gline-tables-only`)
+  maps each sampled host instruction to its C line and so to its guest instruction. In the translated code:
+  about 17 percent was inside out-of-line guest memory helpers, the pc stores 9.5, block entries (the
+  precharge and budget tests) 11.7, the deadline tests after accesses 5, the return dispatch's `switch`
+  3, and the inline FP helpers and float conversions about 15.
+
+**The memory helpers were calls.** gather_pipe.h's `bw_mem_read32` and its siblings are `static inline`, but
+a translated chunk is one function of thousands of blocks, and clang stopped inlining them into it. The
+compiled code called a helper with its own stack frame for every guest load and store, about 2,700 call
+sites in the collision chunk alone, and each call made it store the guest registers back to the CPU state
+around it. Two changes, both exact by construction:
+
+- **gather_pipe.h:** ordinary MEM1 inline and forced (`always_inline`): `!g_ppc_guest_aliases_overlap_mem1`
+  and the address in MEM1 proper (one compare), plus for a store no reservation and no write journal. Anything
+  else is the old wrapper, out of line (`bw_mem_readN_slow`), which makes the same tests again from the
+  start.
+- **scripts/windows/lean_memory.py** (a builder step after fast_blocks.py): in the prepaid block copies, a
+  plain load or store no longer stores its pc and cycle observation suffix first. `bw_readN_at` and
+  `bw_writeN_at` store them on the way out of line only, and the deadline test after the access compares the
+  constant. Only an MMIO handler reads either while a block runs (and the timebase and decrementer reads,
+  which store their own suffix first). ctx->pc is still what the copy would have stored wherever anything
+  can read it: on an access's way out of line, in a deadline refund, before an instruction that calls,
+  jumps or returns without its own store, and at the copy's end.
+
+The cycle observation suffix is now dead state after an access to RAM, so the native audit tests
+(`tests/native_*_test.c`, `fast_blocks_test.c`) no longer compare it. All other CPU bytes and all RAM are
+still compared, and the four audits pass against the new module.
+
+Measured on the 4 E-cores, unpaced, interpolation off, against the module before it (both with the profile
+trained for the old code). Game-thread CPU time per game frame is the steady measure; this PC's game FPS
+varies by a few frames a second from run to run:
+
+| | Game-thread CPU per game frame | Game FPS, standing / running |
+| --- | --- | --- |
+| Before | 26.3-26.6 ms | 31.6 / 32.3 |
+| Inline memory, lean copies | 23.6-24.2 ms | 34.6-35.3 / 34.7-35.2 |
+
+Frames are the same: with the GX translation on the game thread (`DOL_GX_FIFO_WORKER=0`), 19 of 19
+captures identical to 0.2.2's.
+
+**Tried and dropped, all exact and all measured on the same route:**
+
+- *One test at each block's entry* (a floor kept by the host's cycle domain, `downcount - N >= floor`, in
+  place of the precharge and budget tests) together with taking the pc stores out of FP instructions:
+  26.4-27.7 ms a frame, slower than the lean copies alone. The block entries compile to fewer instructions,
+  but the module grew by a tenth and got slower overall.
+- *The return dispatch through a table* (a 4,096-entry label table in place of the `switch` over a
+  chunk's return sites): the chunk grew 14 percent. In C every computed goto may reach every
+  address-taken label, so a second one changes the whole function's code. With the entry test, 25.1-26.8
+  ms.
+- *The deadline test after an access gated on a local flag set by the out-of-line path*: the compiler keeps
+  the flag in a register and still tests it, and the chunk grows 16 percent.
+- `-mllvm -jump-table-density` low enough for the return `switch`: clang still builds a search tree.
+
+**Natives.** The existing natives mostly run (`BLUEWAKE_SESSION_LOG=0` shows their counts at exit). Two
+decline most of their calls: J3D's s16 keyframe interpolation (169,354 run, 629,677 declined) and
+`calcTransform` (126,230 / 449,646), which only cover single-key channels and strictly increasing key
+times. Hand-written exact natives of the collision family (the instruction-level transliterations the
+existing ones are, with each block's cycles, scratch registers and stack bytes) gave 1.3-2x on the leaves
+done so far. The family is about 10 percent of the game thread, so each function is worth little alone; the
+translation-wide change above was worth more.
+
+**Shader caches.** Asked whether one makes sense: there are two already. Aurora's pipeline cache
+(`pipeline_cache.db`, seeded from the release's `initial_pipeline_cache.db`, 213 pipelines) builds known
+pipelines on a background thread at start, and Dawn's blob cache (`dawn_cache.db`) keeps compiled shaders
+between launches. Both are for first-time hitches, not frame rate. A seed recorded over more of the game
+would cut the first visits' hitches (`[gx-slow] batch_ms=750 pipelines=21` on the first frames here).
+
 ## 2026-10-01 Low-end CPUs: frame interpolation that gives way, guest RAM as a global, and the display's own rate
 
 The goal: run well on a 4-core laptop CPU (a tester's i7-8565U with Intel UHD 620). The stand-in is 4 of the

@@ -332,6 +332,9 @@ static double bench(const StaticRecompModuleDesc* mod, CPUState* guest, CPUState
     QueryPerformanceCounter(&end);
     return (double)(end.QuadPart - start.QuadPart) * 1e9 / (double)freq.QuadPart / 200000.0;
 }
+/* The cycle observation suffix is dead after an access to RAM: since
+ * scripts/windows/lean_memory.py the translation stores it only on the way
+ * to an MMIO or timebase handler, its only readers. It is not compared. */
 int main(int argc, char** argv) {
     if (argc < 2)
         return 2;
@@ -397,6 +400,7 @@ int main(int argc, char** argv) {
                 return 1;
             CPUState ref = *g;
             ref.ram = a;
+            ref.cycle_observation_suffix = c.cycle_observation_suffix;
             if (ram_diff(a, b) || memcmp(&c, &ref, sizeof c)) {
                 mismatch(&c, &ref, i, entries[which]);
                 return 1;

@@ -148,6 +148,9 @@ static u8* module_mem1(HMODULE lib) {
     return ram;
 }
 
+/* The cycle observation suffix is dead after an access to RAM: since
+ * scripts/windows/lean_memory.py the translation stores it only on the way
+ * to an MMIO or timebase handler, its only readers. It is not compared. */
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: native_j3d_test MODULE.dll [CASES] [BENCH_CALLS] [ROUTED.dll]\n");
@@ -217,6 +220,7 @@ int main(int argc, char** argv) {
         if (!mod->dispatch(g, leaf)) { fprintf(stderr, "translation did not run\n"); return 1; }
         CPUState reference = *g;
         reference.ram = native.ram;
+        reference.cycle_observation_suffix = native.cycle_observation_suffix;
         if (memcmp(&native, &reference, sizeof native) ||
             memcmp(native_ram + AREA - GC_RAM_BASE, reference_ram + AREA - GC_RAM_BASE, AREA_SIZE)) {
             fprintf(stderr, "case %u (%08X, seed %08X): mismatch, FPR offset %u, PS1 offset %u\n",
@@ -237,6 +241,7 @@ int main(int argc, char** argv) {
             if (!routed->dispatch(h, leaf)) return 1;
             CPUState routed_result = *h;
             routed_result.ram = reference.ram;
+            routed_result.cycle_observation_suffix = reference.cycle_observation_suffix;
             if (memcmp(&routed_result, &reference, sizeof reference) ||
                 memcmp(routed_ram + AREA - GC_RAM_BASE, reference_ram + AREA - GC_RAM_BASE, AREA_SIZE)) {
                 fprintf(stderr, "case %u (%08X): routed module differs from original\n", i, leaf); return 1;
