@@ -184,8 +184,8 @@ keep. (On a Mac F9 loads; on Windows F9 is the frame rate.)
 **Settings.** F1 opens the settings over the game (it keeps running underneath; the keyboard and mouse work the
 menu until you close it):
 
-- *Display*: fullscreen, the frame rate (30 FPS, 60 or 120 FPS with frame interpolation, or the experimental
-  60 Hz game logic; see below), the frame rate counter, the render resolution (the window's own pixels, or 1x to 4x the GameCube's 480 lines),
+- *Display*: fullscreen, the frame rate (30 FPS; 60 FPS, 120 FPS or the display's own rate up to 240 with
+  frame interpolation; or the experimental 60 Hz game logic; see below), the frame rate counter, the render resolution (the window's own pixels, or 1x to 4x the GameCube's 480 lines),
   texture filtering (up to 16x anisotropic), keeping the picture's shape, pausing while the window is in the
   background, and putting the window back in the middle.
 - *Controls*: the mouse camera, its sensitivity and vertical direction, the fast right-stick camera (or the
@@ -200,7 +200,7 @@ Display and control settings apply at once. The mods and the sound mode are comp
 starts, so those marked `*` apply when BlueWake starts again; **Restart now** does that. Everything is saved to
 `%APPDATA%\BlueWake\settings.ini`.
 
-**Frame rate.** The Display tab's **Frame rate** list has four choices. **60 FPS (frame interpolation)** is the
+**Frame rate.** The Display tab's **Frame rate** list has five choices. **60 FPS (frame interpolation)** is the
 default (Smooth Motion): the renderer draws a blended frame between each of the game's 30, so the game shows 60
 frames a second (F9's counter reads `60 FPS (game 30)`). **120 FPS (frame interpolation)** draws three in-between
 frames each, for a 120 Hz display, and **30 FPS** is the game's own, with none; F10 turns frame interpolation off
@@ -209,6 +209,18 @@ used only while the window is on a display of 100 Hz or more: on a 60 Hz display
 presents the display cannot show and run at half speed, so it shows 60 there (the menu says so). Scenes with
 nothing to blend (menus, the title, still shots) keep the same rhythm, so the picture's timing does not change
 when they begin or end.
+
+**Match the display (frame interpolation, up to 240 FPS)** shows as many frames as the window's display does,
+in whole steps of 30: 240 on a 240 Hz display, 180 on 200 Hz, 150 on 165 Hz, 120 on 144 Hz, 90 on 100 Hz and
+60 on a 60 or 75 Hz one (the menu shows which). It follows the window to another display.
+
+Frame interpolation gives way when the computer cannot keep up. If the GPU or the render thread falls a frame
+behind, or the game itself drops below full speed (game frames more than 35.5 ms apart on average: a CPU with
+few cores, where the in-between frames' work takes time the game's own thread needs), the in-between frames
+stop until things are calm again, rather than the game running in slow motion. On 4 of an i9-13900KF's slower
+cores, 60 FPS used to hold the game at 24-28 frames a second; now the game keeps its 30. After a stop for the
+game's speed, it waits a little longer each time before trying again (up to 2 minutes). The session log says
+when it happens (`[interp-pace]` lines).
 
 **60 Hz game logic (experimental, not recommended)**, the list's last choice, runs the game itself 60 times a
 second instead of blending frames, so parts of it (movement, cutscenes, some timers) still run too fast; frame

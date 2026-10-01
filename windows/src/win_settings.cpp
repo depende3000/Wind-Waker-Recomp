@@ -78,6 +78,10 @@ float calculate_game_fps() noexcept;
 
 namespace {
 
+// Settings::smooth_steps for "match the display" (shown_steps works the
+// steps out from its refresh rate).
+constexpr int kStepsDisplay = -1;
+
 struct Settings {
     // Display: apply at once.
     bool fullscreen = false;
@@ -86,7 +90,8 @@ struct Settings {
     int render_scale = 0;  // 0: the window's own pixels; 1-4: x 480 lines
     int anisotropy = 1;    // 1: the game's own filtering; 2-16 forced
     bool smooth_motion = true;  // in-between frames, from the game's 30 a second
-    int smooth_steps = 1;       // in-between frames per game frame: 1 (60 FPS) or 3 (120 FPS)
+    int smooth_steps = 1;       // in-between frames per game frame: 1 (60 FPS), 3 (120 FPS) or
+                                // kStepsDisplay (as many as the display shows, shown_steps)
     bool show_fps = false;
     bool pause_unfocused = false;
     bool fast_forward = true;  // skip through the black while loading (fast_load.h)
@@ -158,7 +163,8 @@ void load_file() {
         else if (k == "render_scale") d.render_scale = std::clamp(std::atoi(v.c_str()), 0, 4);
         else if (k == "anisotropy") d.anisotropy = std::clamp(std::atoi(v.c_str()), 1, 16);
         else if (k == "smooth_motion") d.smooth_motion = parse_bool(v);
-        else if (k == "smooth_motion_fps") d.smooth_steps = std::atoi(v.c_str()) >= 120 ? 3 : 1;
+        else if (k == "smooth_motion_fps")
+            d.smooth_steps = v == "display" ? kStepsDisplay : std::atoi(v.c_str()) >= 120 ? 3 : 1;
         else if (k == "fast_forward") d.fast_forward = parse_bool(v);
         else if (k == "quick_doors") d.quick_doors = parse_bool(v);
         else if (k == "climb") d.climb = parse_bool(v);
@@ -198,7 +204,8 @@ void save_file() {
         std::fprintf(f, "window_position=%d,%d\n", d.window_x, d.window_y);
     std::fprintf(f, "render_scale=%d\nanisotropy=%d\nsmooth_motion=%d\nshow_fps=%d\npause_unfocused=%d\n",
                  d.render_scale, d.anisotropy, d.smooth_motion, d.show_fps, d.pause_unfocused);
-    std::fprintf(f, "smooth_motion_fps=%d\nfast_forward=%d\nquick_doors=%d\n", d.smooth_steps >= 3 ? 120 : 60,
+    std::fprintf(f, "smooth_motion_fps=%s\nfast_forward=%d\nquick_doors=%d\n",
+                 d.smooth_steps == kStepsDisplay ? "display" : d.smooth_steps >= 3 ? "120" : "60",
                  d.fast_forward, d.quick_doors);
     std::fprintf(f, "climb=%d\nclimb_stamina=%d\n", d.climb, d.climb_stamina);
     std::fprintf(f, "mouse_camera=%d\nmouse_sensitivity=%.2f\nmouse_invert_y=%d\n", d.mouse_camera,
@@ -361,15 +368,34 @@ void apply_controller() {
 // 120 FPS (3) presents faster than a 60 Hz display shows, and as the game
 // waits for its presents it would run at half speed; there it is 60 (1)
 // until the window is on a display of 100 Hz or more. The setting is kept.
+// Matching the display (kStepsDisplay) shows the most whole steps of 30 a
+// second its refresh allows, real frames included (150 on 165 Hz, 240 on 240
+// Hz; 120 on 144 Hz, where 150 would outrun it), up to Aurora's limit of 7 in-
+// between frames (frame_interp::kMaxSteps).
 int shown_steps() {
+    if (g_saved.smooth_steps == kStepsDisplay) {
+        if (g_refresh <= 0.0f)
+            return 1;
+        const int presents = static_cast<int>(g_refresh / 30.0f + 0.05f); // 59.94 Hz is 60's
+        return std::clamp(presents - 1, 1, 7);
+    }
     return g_saved.smooth_steps >= 3 && (g_refresh == 0.0f || g_refresh >= 100.0f) ? 3 : 1;
 }
+
+int shown_fps() { return (shown_steps() + 1) * 30; }
 
 void note_refresh(SDL_Window* w) {
     if (w == nullptr)
         return;
     if (const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w)))
         g_refresh = mode->refresh_rate;
+    // Testing (BLUEWAKE_TEST_REFRESH=HZ): the display's rate as if it were HZ.
+    static const float test_refresh = [] {
+        const char* env = std::getenv("BLUEWAKE_TEST_REFRESH");
+        return env != nullptr ? static_cast<float>(std::atof(env)) : 0.0f;
+    }();
+    if (test_refresh > 0.0f)
+        g_refresh = test_refresh;
 }
 
 // The fast right-stick camera reads the controller through SDL itself, so the
@@ -453,26 +479,29 @@ void restart_note(bool differs) {
     }
 }
 
-// The frame rate, one choice: the game's own 30 frames a second (0); 60 (1) or
-// 120 (2) shown with frame interpolation (Smooth Motion: blended in-between
-// frames, one or three per game frame); or the experimental 60 Hz game logic
-// (3), where the game itself runs 60 times a second (no in-between frames;
-// applies at the next launch, like the mods).
+// The frame rate, one choice: the game's own 30 frames a second (0); 60 (1),
+// 120 (2) or as many as the display shows (3, up to 240) with frame
+// interpolation (Smooth Motion: blended in-between frames); or the
+// experimental 60 Hz game logic (4), where the game itself runs 60 times a
+// second (no in-between frames; applies at the next launch, like the mods).
+enum { kRate30, kRate60, kRate120, kRateDisplay, kRateNative60, kRateChoices };
+
 int frame_rate_choice() {
     const Settings& d = g_saved;
-    return d.native_60hz && bluewake_simulation_supported() ? 3
-           : !d.smooth_motion                               ? 0
-           : d.smooth_steps >= 3                            ? 2
-                                                            : 1;
+    return d.native_60hz && bluewake_simulation_supported() ? kRateNative60
+           : !d.smooth_motion                               ? kRate30
+           : d.smooth_steps < 0                             ? kRateDisplay
+           : d.smooth_steps >= 3                            ? kRate120
+                                                            : kRate60;
 }
 
 void choose_frame_rate(int rate) {
     Settings& d = g_saved;
-    d.native_60hz = rate == 3;
-    if (rate != 3) {
-        d.smooth_motion = rate != 0;
-        if (rate != 0)
-            d.smooth_steps = rate == 2 ? 3 : 1;
+    d.native_60hz = rate == kRateNative60;
+    if (rate != kRateNative60) {
+        d.smooth_motion = rate != kRate30;
+        if (rate != kRate30)
+            d.smooth_steps = rate == kRateDisplay ? kStepsDisplay : rate == kRate120 ? 3 : 1;
         // While the 60 Hz game logic runs, frame interpolation waits for the
         // next launch with it.
         if (!bluewake_simulation_enabled()) {
@@ -489,30 +518,34 @@ void tab_display(SDL_Window* w) {
     if (ImGui::Checkbox("Fullscreen   (F11 or Alt+Enter)", &full))
         set_fullscreen(w, full);
     const bool native = bluewake_simulation_enabled();
-    static const char* const kFrameRate[] = {
+    static const char* const kFrameRate[kRateChoices] = {
         "30 FPS (the game's own)",
         "60 FPS (frame interpolation)",
         "120 FPS (frame interpolation, 120 Hz displays)",
+        "Match the display (frame interpolation, up to 240 FPS)",
         "60 Hz game logic (experimental, not recommended)",
     };
     int rate = frame_rate_choice();
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 20);
-    if (ImGui::Combo("Frame rate", &rate, kFrameRate, bluewake_simulation_supported() ? 4 : 3))
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 21);
+    if (ImGui::Combo("Frame rate", &rate, kFrameRate, bluewake_simulation_supported() ? kRateChoices : kRateChoices - 1))
         choose_frame_rate(rate);
     restart_note(d.native_60hz != g_launched.native_60hz);
-    if (rate == 3) {
+    if (rate == kRateNative60) {
         ImGui::TextDisabled("    The game itself runs 60 times a second. Movement, cutscenes and some timers");
         ImGui::TextDisabled("    are not converted yet, so parts run too fast or look wrong; it needs a fast CPU.");
-    } else if (rate == 0) {
+    } else if (rate == kRate30) {
         ImGui::TextDisabled("    No frame interpolation: the game's own 30 frames a second. F10 turns it on.");
     } else {
         ImGui::TextDisabled("    The game runs at its own 30 a second; frame interpolation blends the frames");
         ImGui::TextDisabled("    in between. F10 turns it off and on.");
     }
-    if (native && rate != 3)
+    if (native && rate != kRateNative60)
         ImGui::TextDisabled("    The 60 Hz game logic runs until BlueWake starts again.");
-    else if (!native && rate == 2 && shown_steps() < 3)
+    else if (!native && rate == kRate120 && shown_steps() < 3)
         ImGui::TextDisabled("    This display runs at %.0f Hz: 60 FPS until the window is on a 120 Hz one.", g_refresh);
+    else if (!native && rate == kRateDisplay)
+        ImGui::TextDisabled("    %d FPS on this %.0f Hz display: the most whole steps of 30 it shows, up to 240.",
+                            shown_fps(), g_refresh);
     if (ImGui::Checkbox("Show the frame rate   (F9)", &d.show_fps)) {
         aurora_set_fps_overlay(d.show_fps);
         changed();
@@ -966,7 +999,7 @@ void frame(void*) {
         test_menu_done = true;
         set_menu_open(true);
         if (const char* rate = std::strchr(test_menu, ':'); rate != nullptr)
-            choose_frame_rate(std::clamp(std::atoi(rate + 1), 0, 3));
+            choose_frame_rate(std::clamp(std::atoi(rate + 1), 0, kRateChoices - 1));
     }
     track_window(w);
     // The frame rate in the session log, a line a second beside the host's
@@ -985,8 +1018,8 @@ void frame(void*) {
         note_refresh(w);
         if (aurora_get_frame_interp_steps() != shown_steps()) {
             aurora_set_frame_interp_steps(shown_steps());
-            std::fprintf(stderr, "[windows] Smooth Motion %s (the display runs at %.0f Hz)\n",
-                         shown_steps() >= 3 ? "120 FPS" : "60 FPS", g_refresh);
+            std::fprintf(stderr, "[windows] frame interpolation at %d FPS (the display runs at %.0f Hz)\n",
+                         shown_fps(), g_refresh);
         }
         DolAuroraFrameTiming timing{};
         dol_aurora_frame_timing(&timing);
@@ -1141,7 +1174,7 @@ extern "C" void bw_settings_apply_launch(void) {
     // Aurora reads these before main runs; the command line's --smooth,
     // --120 and --fps (which set them) win over the file.
     if (!env_set("DOL_AURORA_FRAME_INTERP_STEPS"))
-        aurora_set_frame_interp_steps(d.smooth_steps);
+        aurora_set_frame_interp_steps(d.smooth_steps == kStepsDisplay ? 1 : d.smooth_steps);
     else
         g_saved.smooth_steps = std::atoi(std::getenv("DOL_AURORA_FRAME_INTERP_STEPS")) >= 3 ? 3 : 1;
     if (!env_set("DOL_AURORA_FRAME_INTERP"))
@@ -1207,8 +1240,10 @@ extern "C" int bw_settings_key(unsigned virtual_key, int alt) {
         g_saved.smooth_motion = !aurora_get_frame_interpolation();
         aurora_set_frame_interpolation(g_saved.smooth_motion);
         changed();
-        std::fprintf(stderr, "[windows] Smooth Motion %s\n",
-                     !g_saved.smooth_motion ? "off" : g_saved.smooth_steps >= 3 ? "120 FPS" : "60 FPS");
+        if (g_saved.smooth_motion)
+            std::fprintf(stderr, "[windows] frame interpolation on, %d FPS\n", shown_fps());
+        else
+            std::fprintf(stderr, "[windows] frame interpolation off\n");
         return 1;
     case VK_F9:
         g_saved.show_fps = !g_saved.show_fps;

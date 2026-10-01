@@ -6464,6 +6464,15 @@ static inline void host_state_turn(CPUState* cpu, const StaticRecompModuleDesc* 
         host_state_try_save(cpu, mod, loop, retrace_boundary);
 }
 
+// MEM1 is the module's array (bluewake_composite_guest_mem1): cpu_free must
+// not free it.
+static bool g_guest_mem1_from_module;
+static void host_cpu_free(CPUState* cpu) {
+    if (g_guest_mem1_from_module)
+        cpu->ram = NULL;
+    cpu_free(cpu);
+}
+
 int main(int argc, char** argv) {
     // The options menu's saved choices, before anything reads the environment.
     bluewake_settings_load();
@@ -6823,6 +6832,29 @@ int main(int argc, char** argv) {
     // `cpu` names that state for the rest of main (#undef after it).
 #define cpu (*cpu_state)
     if (!cpu_init(&cpu)) { fprintf(stderr, "cpu_init failed\n"); return 1; }
+    // Guest MEM1 likewise: the module's own array when it keeps one
+    // (guest_cpu.c, core/cpu.h's BW_GUEST_MEM1; the translated code reaches
+    // RAM through that global, so it must be this memory).
+    {
+        u8* (*module_guest_mem1)(u32*) = (u8* (*)(u32*))dlsym(lib, "bluewake_composite_guest_mem1");
+        u32 mem1_size = 0u;
+        u8* mem1 = module_guest_mem1 != NULL ? module_guest_mem1(&mem1_size) : NULL;
+        if (mem1 != NULL && mem1_size >= BLUEWAKE_LINKED_RAM_SIZE && mem1_size >= cpu.ram_size) {
+            memcpy(mem1, cpu.ram, cpu.ram_size);
+            free(cpu.ram);
+            cpu.ram = mem1;
+            cpu.ram_size = mem1_size;
+            g_guest_mem1_from_module = true;
+            fprintf(stderr, "[host] guest MEM1 %p (the module's), 0x%08X bytes\n", (void*)mem1, mem1_size);
+        } else if (module_guest_mem1 != NULL) {
+            // The game code would read and write that array while the rest
+            // of the host used other memory: stop rather than run it.
+            fprintf(stderr, "[host] the game module's MEM1 (0x%08X bytes) is smaller than the guest's (0x%08X)\n",
+                    mem1_size, cpu.ram_size);
+            host_cpu_free(&cpu);
+            return 1;
+        }
+    }
     DolViClock vi_clock;
     dol_vi_clock_init(&vi_clock);
     dol_vi_clock_configure(&vi_clock, GUEST_CPU_CYCLES_PER_VI_RETRACE,
@@ -7118,7 +7150,7 @@ int main(int argc, char** argv) {
            layout.entry_point, layout.bss_address, layout.bss_address + layout.bss_size);
 #ifdef BLUEWAKE_HAS_DSP_ADAPTER
     if (!host_dsp_adapter_init(&cpu)) {
-        cpu_free(&cpu);
+        host_cpu_free(&cpu);
         return 1;
     }
 #endif
@@ -15376,7 +15408,7 @@ int main(int argc, char** argv) {
     host_dsp_adapter_shutdown();
 #endif
     bluewake_card_runtime_close();
-    cpu_free(&cpu);
+    host_cpu_free(&cpu);
     // A quit is the player closing the window: a normal end, not a failure.
     // (The Windows app shows an error box for any other status.)
     return stop_reason != NULL && strcmp(stop_reason, "quit") != 0 ? 1 : 0;

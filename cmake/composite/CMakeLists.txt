@@ -176,6 +176,13 @@ endif()
 # The chassis loop hands the chunks' gather-pipe batch (gather_pipe.c) to the
 # host wherever the host looks (dispatch_loop.h).
 target_compile_definitions(${MODULE_NAME} PRIVATE BLUEWAKE_GATHER_PIPE_BATCH=1)
+if(WIN32)
+  # MEM1 as a global array beside the guest CPU's state (guest_cpu.c,
+  # core/cpu.h's BW_GUEST_MEM1): guest registers stay in host registers
+  # across guest loads and stores. 32 MiB, the host's linked RAM size.
+  target_compile_definitions(${MODULE_NAME} PRIVATE BW_GUEST_MEM1=bw_guest_mem1
+      BW_GUEST_MEM1_SIZE=0x02000000u)
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(${MODULE_NAME} PRIVATE Threads::Threads)
 if(WIN32)

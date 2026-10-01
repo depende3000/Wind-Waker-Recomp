@@ -103,6 +103,24 @@ static CPUState build(u8* ram, u32 leaf, unsigned scenario) {
     return c;
 }
 
+/* A module built with BW_GUEST_MEM1 (the Windows builder's) runs its
+ * translated code on its own MEM1 array, whatever a state's ram says: the
+ * translated side's RAM has to be that array. Zeroed and returned, or NULL
+ * for a module without one. */
+static u8* module_mem1(HMODULE lib) {
+    u8* (*mem1)(u32*) = (u8* (*)(u32*))(void*)GetProcAddress(lib, "bluewake_composite_guest_mem1");
+    u32 size = 0;
+    u8* ram = mem1 != NULL ? mem1(&size) : NULL;
+    if (ram == NULL)
+        return NULL;
+    if (size < GC_MAIN_RAM_SIZE) {
+        fprintf(stderr, "the module's MEM1 is 0x%X bytes\n", size);
+        exit(1);
+    }
+    memset(ram, 0, GC_MAIN_RAM_SIZE);
+    return ram;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: native_vec_test MODULE.dll [CASES]\n");
@@ -125,7 +143,8 @@ int main(int argc, char** argv) {
         fprintf(stderr, "CPU state size %u, expected %u\n", mod->cpu_state_size, (unsigned)sizeof(CPUState));
         return 1;
     }
-    u8* reference_ram = calloc(1, RAM_SIZE);
+    u8* reference_ram = module_mem1(lib);
+    if (reference_ram == NULL) reference_ram = calloc(1, RAM_SIZE);
     u8* native_ram = calloc(1, RAM_SIZE);
     if (!reference_ram || !native_ram) return 1;
     unsigned ran[LEAF_COUNT] = {0}, declined[LEAF_COUNT] = {0};

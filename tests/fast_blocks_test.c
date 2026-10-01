@@ -146,9 +146,28 @@ static CPUState build(u8* ram, u32 entry, unsigned scenario) {
     return c;
 }
 
+/* A module built with BW_GUEST_MEM1 (the Windows builder's) runs its
+ * translated code on its own MEM1 array, whatever a state's ram says: the
+ * translated side's RAM has to be that array. Zeroed and returned, or NULL
+ * for a module without one. */
+static u8* module_mem1(HMODULE lib) {
+    u8* (*mem1)(u32*) = (u8* (*)(u32*))(void*)GetProcAddress(lib, "bluewake_composite_guest_mem1");
+    u32 size = 0;
+    u8* ram = mem1 != NULL ? mem1(&size) : NULL;
+    if (ram == NULL)
+        return NULL;
+    if (size < GC_MAIN_RAM_SIZE) {
+        fprintf(stderr, "the module's MEM1 is 0x%X bytes\n", size);
+        exit(1);
+    }
+    memset(ram, 0, GC_MAIN_RAM_SIZE);
+    return ram;
+}
+
 typedef struct Module {
     const StaticRecompModuleDesc* desc;
     CPUState* cpu;
+    u8* ram; /* its MEM1 (module_mem1), or NULL */
 } Module;
 
 static int open_module(const char* path, Module* out) {
@@ -165,6 +184,7 @@ static int open_module(const char* path, Module* out) {
     }
     out->desc = get();
     out->cpu = guest_cpu();
+    out->ram = module_mem1(lib);
     if (out->desc->cpu_state_size != sizeof(CPUState)) {
         fprintf(stderr, "%s: CPU state size %u, expected %u\n", path, out->desc->cpu_state_size,
                 (unsigned)sizeof(CPUState));
@@ -203,8 +223,8 @@ int main(int argc, char** argv) {
         fprintf(stderr, "the two modules share one guest CPU: load them under different file names\n");
         return 1;
     }
-    u8* ram_a = calloc(1, RAM_SIZE);
-    u8* ram_b = calloc(1, RAM_SIZE);
+    u8* ram_a = a.ram != NULL ? a.ram : calloc(1, RAM_SIZE);
+    u8* ram_b = b.ram != NULL ? b.ram : calloc(1, RAM_SIZE);
     if (!ram_a || !ram_b) return 1;
     unsigned per_entry[ENTRY_COUNT] = {0}, stopped = 0, refunded = 0;
     for (unsigned i = 0; i < cases; ++i) {

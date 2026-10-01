@@ -55,13 +55,29 @@ static int edge_service(void* user, CPUState* cpu, u32 at) {
     (void)cpu;
     return at == 0xFFFFFFFCu;
 }
-static u8* image(void) {
-    u8* p = VirtualAlloc(NULL, GC_MAIN_RAM_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+static u8* protect_image(u8* p) {
     DWORD old;
     if (!p || !VirtualProtect(p, GC_MAIN_RAM_SIZE, PAGE_READONLY, &old) ||
         !VirtualProtect(p + AREA - GC_RAM_BASE, DATA_BYTES, PAGE_READWRITE, &old))
         return NULL;
     return p;
+}
+static u8* image(void) {
+    return protect_image(VirtualAlloc(NULL, GC_MAIN_RAM_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+}
+/* A module built with BW_GUEST_MEM1 (the Windows builder's) runs its
+ * translated code on its own MEM1 array (page aligned), whatever a state's
+ * ram says: the translated side's image has to be that array. */
+static u8* module_image(HMODULE lib) {
+    u8* (*mem1)(u32*) = (u8* (*)(u32*))(void*)GetProcAddress(lib, "bluewake_composite_guest_mem1");
+    u32 size = 0;
+    u8* ram = mem1 != NULL ? mem1(&size) : NULL;
+    if (ram == NULL)
+        return image();
+    if (size < GC_MAIN_RAM_SIZE)
+        return NULL;
+    memset(ram, 0, GC_MAIN_RAM_SIZE);
+    return protect_image(ram);
 }
 static int ram_diff(const u8* a, const u8* b) {
     if (!memcmp(a + AREA - GC_RAM_BASE, b + AREA - GC_RAM_BASE, DATA_BYTES))
@@ -347,7 +363,7 @@ int main(int argc, char** argv) {
         return 1;
     set_edge(edge_service, NULL);
     u8* a = image();
-    u8* b = image();
+    u8* b = module_image(lib);
     if (!a || !b)
         return 1;
     for (unsigned which = 0; which < sizeof entries / sizeof entries[0]; ++which) {

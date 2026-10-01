@@ -1,3 +1,85 @@
+## 2026-10-01 Low-end CPUs: frame interpolation that gives way, guest RAM as a global, and the display's own rate
+
+The goal: run well on a 4-core laptop CPU (a tester's i7-8565U with Intel UHD 620). The stand-in is 4 of the
+i9-13900KF's E-cores (process affinity `0x000F0000`), on the Outset route (`bench.ps1`: stand at the spawn
+view, about 14,000 draws a frame, then run and turn).
+
+**What the 4 cores did with the defaults.** Paced like a player, at 60 FPS frame interpolation (the default),
+0.2.2 ran the game at 24-28 frames a second: slow motion, with the F9 counter still near 50-55. With
+interpolation off, the same cores held 30. The in-between frames' work took cores the game's own thread needs:
+each draw captured on the GX worker, matched on the helper thread, then drawn again by the render worker. Aurora's
+pacing dropped in-between frames only when the GPU or the render worker fell behind, never
+when the game itself did.
+
+**Frame interpolation gives way (RecompCore 6348954, patch 0119).** Game frames ending more than 35.5 ms apart
+on average (8 frames, under 28.2 a second) now count as an overload at any step count. Gaps of a quarter second
+or more (a load, a pause) start the average again. After a drop for the game's speed, the calm needed before
+trying again doubles up to 2 minutes (30 s for the GPU). A frame without in-between frames queues no matching
+work, so the drop gives the CPU back. `DOL_AURORA_FRAME_INTERP_PACING=0` still turns all pacing off. On the 4
+E-cores, paced at 60 FPS, two runs each against 0.2.2:
+
+| | Standing at the spawn view | Running |
+| --- | --- | --- |
+| 0.2.2 | 24.4-25.4 game frames a second | 25.7-28.1 |
+| This build | 29.6-30.0 | 29.7-30.0 |
+
+There the in-between frames go off within a second of the heavy view and stay off: these cores hold the game's
+own 30 with little to spare (27-30 in the heaviest moments, interpolation off). The counter still reads about
+60 because Aurora shows each real frame twice while the in-between frames are off (as 0.2.2 did after its
+GPU drops). On the full i9 nothing changes: one drop at boot (the startup screens' frames come 48 ms apart),
+none in play.
+
+**Match the display, up to 240 FPS.** The Frame rate list has a fifth choice, **Match the display (frame
+interpolation, up to 240 FPS)**. It shows the display's rate in whole steps of 30 (`shown_steps`), up to 7
+in-between frames (`frame_interp::kMaxSteps`, was 3), and follows the window to another display.
+`smooth_motion_fps=display` in settings.ini. Aurora's per-step state grew with it: the held frames, the
+per-job ranges (`InterpRanges` held 3; at 7 the helper overran its stack, a fail-fast exit), and the buffers'
+limits. Each buffer still starts where 60 and 120 left it and grows to what a frame needs. One trap: the
+vertex limit, 8 MB / 3 * 7, was not a multiple of 4, so no mapped staging buffer could be made and every frame
+silently lost its in-between frames. The FPS counter still read 60 (the held frame twice), and a benchmark
+showed a false gain until the frame dumps came back empty. `BLUEWAKE_TEST_REFRESH=HZ` makes the window's
+display report HZ, for tests. Simulated at 240 Hz (pacing off, as this 60 Hz display holds presents back),
+each game frame had its 7 in-between frames, each an even step nearer the next real frame (mean pixel
+difference to the previous real frame 0.52, 0.67, ... 1.16, and to the next 1.00 ... 0.20). Not yet seen on a
+real high-refresh display.
+
+**Guest MEM1 as a global array (RecompCore 0118).** The Windows module defines `BW_GUEST_MEM1=bw_guest_mem1`
+(32 MiB, page aligned, `cmake/composite/guest_cpu.c`), and `get_ram_ptr` indexes it directly. The host adopts
+it as `cpu.ram` (`bluewake_composite_guest_mem1`), and refuses to run if it cannot. Through `cpu->ram`, a
+pointer read at run time, any guest load or store might have aliased the guest CPU's state, so translated
+code stored the guest registers before every guest store and reloaded them after. Through a second global it
+cannot. Unpaced on the 4 E-cores with interpolation off: 0.2.2 31.0 standing and 31.9 running, this 32.4 and
+32.3 (two runs each; 1-5 percent, near the noise). The audit tests (`tests/native_*_test.c`,
+`fast_blocks_test.c`) now run the translated side on the module's own MEM1 when it has one. All four native
+audits pass against the new module.
+
+**Verified.** With interpolation at 60, the dumped real and in-between frames of game frames 880-910 are
+byte for byte the release's (62 of 62), with pacing on and off. At 30 FPS, the retrace-sampled captures
+(`BLUEWAKE_CAPTURE_RETRACE`/`_INTERVAL`) moved by a game frame from 1007 onward. A capture takes whichever frame
+the render worker hands back after the retrace, so it follows host timing, and this build's faster game thread
+changed it. Every guest-side log line (milestones, retraces and block counts) was identical to 0.2.2's. With
+the GX translation on the game thread (`DOL_GX_FIFO_WORKER=0`), where that timing cannot move, 0.2.2 and this
+build give the same 19 frames.
+
+**Where the 4 cores' time goes (for what is next).** The game thread is about 85 percent busy, and about 70
+percent of it is translated game code, flat (the top function, collision's `GroundCrossGrpRp`, is 2.3
+percent). The rest of its time is mostly waiting. A sampler that walks the stack (DbgHelp `StackWalk64`)
+found about 9 percent of it in `GXDrawDone` at `JFWDisplay::endFrame` (`main.c`'s drain: the GX worker
+finishing the frame's last draws) and 3.5 percent in the draw-done drain at `GXSetDrawDone`. The GX worker is
+about half busy. Its time is spread across many small costs: building each draw's plan, the 2.3 KB transform
+snapshot copies, comparing the 2.8 KB constant block, and `TextureRef` reference counts. Upstream Aurora
+(Dusklight's) avoids much of that with dirty flags per state group and GPU vertex decoding. Its draw-done
+completes on the FIFO worker, but here the game reading vertex arrays and matrices from RAM after
+`GXDrawDone` makes returning before the worker is done unsafe without snapshots.
+
+**Tried and dropped.** Batching audio pushes (256 frames per push instead of each DSP chunk, to take SDL's
+stream lock about 125 times a second instead of 1,300): no measurable change (its waits are 0.4 percent of
+the game thread). A larger GX FIFO hand-off batch (4-32 KB): no change.
+
+**Next.** Natives for whole measured loops (collision's ground and wall checks, J3D animation; the J3D native
+leaves already run 4-5 times faster than their translation). A versioned XF state, so an unchanged draw skips
+the snapshot copies and the constant rebuild. Seeing Match the display on a real 144 or 240 Hz display.
+
 ## 2026-10-01 Windows 0.2.2 update: one Frame rate list, and the mouse a game frame sooner
 
 **The Frame rate list.** Players confused Smooth Motion (60 or 120 shown, the game at its own 30) with

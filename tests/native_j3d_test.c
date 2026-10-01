@@ -130,6 +130,24 @@ static double elapsed(LARGE_INTEGER start, LARGE_INTEGER stop, LARGE_INTEGER fre
     return (double)(stop.QuadPart - start.QuadPart) * 1e9 / (double)freq.QuadPart / count;
 }
 
+/* A module built with BW_GUEST_MEM1 (the Windows builder's) runs its
+ * translated code on its own MEM1 array, whatever a state's ram says: the
+ * translated side's RAM has to be that array. Zeroed and returned, or NULL
+ * for a module without one. */
+static u8* module_mem1(HMODULE lib) {
+    u8* (*mem1)(u32*) = (u8* (*)(u32*))(void*)GetProcAddress(lib, "bluewake_composite_guest_mem1");
+    u32 size = 0;
+    u8* ram = mem1 != NULL ? mem1(&size) : NULL;
+    if (ram == NULL)
+        return NULL;
+    if (size < GC_MAIN_RAM_SIZE) {
+        fprintf(stderr, "the module's MEM1 is 0x%X bytes\n", size);
+        exit(1);
+    }
+    memset(ram, 0, GC_MAIN_RAM_SIZE);
+    return ram;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: native_j3d_test MODULE.dll [CASES] [BENCH_CALLS] [ROUTED.dll]\n");
@@ -161,11 +179,13 @@ int main(int argc, char** argv) {
         if (!routed_get || !routed_cpu) return 1;
         routed = routed_get();
         if (routed->cpu_state_size != sizeof(CPUState)) return 1;
-        routed_ram = calloc(1, GC_MAIN_RAM_SIZE);
+        routed_ram = module_mem1(other);
+        if (routed_ram == NULL) routed_ram = calloc(1, GC_MAIN_RAM_SIZE);
         if (!routed_ram) return 1;
     }
     u8* native_ram = calloc(1, GC_MAIN_RAM_SIZE);
-    u8* reference_ram = calloc(1, GC_MAIN_RAM_SIZE);
+    u8* reference_ram = module_mem1(lib);
+    if (reference_ram == NULL) reference_ram = calloc(1, GC_MAIN_RAM_SIZE);
     u8* before = malloc(AREA_SIZE);
     if (!native_ram || !reference_ram || !before) return 1;
     for (u32 k = 0; k < 0x8000u; k += 4u) put(native_ram, AREA + k, trig_bits());

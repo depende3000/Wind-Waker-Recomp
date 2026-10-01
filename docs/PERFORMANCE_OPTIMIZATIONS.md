@@ -384,6 +384,38 @@ and `DOL_GXCORE_DERIVED_VERIFY=1` finding no mismatch in 5.7 million hits on a w
 a save state load. The Mac line carries 21-25 as its patch 0112 (RecompCore 8ab24da, merged there from
 RecompCore windows-release 82607d4).
 
+## A 4-core CPU (2026-10-01)
+
+Measured on 4 of the i9-13900KF's E-cores (affinity `0x000F0000`), the stand-in for a 4-core laptop CPU such as
+an i7-8565U. Details in [status/CURRENT.md](status/CURRENT.md), 2026-10-01.
+
+### 26. Frame interpolation gives way to the game (0119, `frame_interp.cpp`, `gxcore_draw.cpp`)
+
+At 60 FPS frame interpolation, the in-between frames' work (the capture on the GX worker, the matching on its
+helper, the render worker drawing each frame twice) took cores the game's thread needed, and the game ran in
+slow motion. The pacing now also drops in-between frames when game frames end more than 35.5 ms apart on
+average. It waits up to 2 minutes before trying again, and a frame without them queues no matching work.
+
+| 4 E-cores, paced, 60 FPS frame interpolation | Standing at the spawn view | Running |
+| --- | --- | --- |
+| 0.2.2 | 24.4-25.4 game FPS | 25.7-28.1 |
+| With it | 29.6-30.0 | 29.7-30.0 |
+
+The 60 FPS dumps (62 real and in-between frames) are byte for byte the release's.
+
+### 27. Guest MEM1 as a global array (0118, `core/cpu.h`, `cmake/composite/guest_cpu.c`)
+
+The Windows module reaches guest RAM through `bw_guest_mem1`, a global array that the host adopts as
+`cpu.ram`, instead of through `cpu->ram`. The compiler then knows that a guest load or store cannot touch the
+guest CPU's state (another global). The guest registers stay in host registers across guest memory accesses,
+instead of being stored before every guest store and reloaded after. Unpaced on the 4 E-cores with
+interpolation off, 1-5 percent faster (31.0 and 31.9 game FPS standing and running, now 32.4 and 32.3).
+
+### 28. Up to 7 in-between frames (0119)
+
+Not for speed: **Match the display** shows the display's rate in steps of 30, up to 240. The buffers start
+where 60 and 120 used them and grow only as a frame needs. See [WINDOWS.md](WINDOWS.md).
+
 ## Finding slow spots
 
 | Tool | What it shows |
@@ -423,6 +455,8 @@ RecompCore windows-release 82607d4).
   a fixed order.
 - **Remaining 120 Hz dips in Adanmae's heaviest views.** The limit there is presentation, not draw
   calls or the GPU's shading.
+- **Batching audio pushes** (2026-10-01; 256 frames a push, not each DSP chunk) and **a larger GX FIFO
+  hand-off** (4-32 KB): no measurable change on the 4 E-cores.
 - **Tried earlier and measured no gain or slower** (CURRENT.md and PERFORMANCE.md): exact inline FP
   fast paths, forced inlining of the paired-single loads and stores, a lower render resolution,
   compiling for M2-class chips, a last-alias lookup cache, native dispatch of __save_gpr and
@@ -433,8 +467,8 @@ RecompCore windows-release 82607d4).
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `DOL_AURORA_FRAME_INTERP` | 1 in the app | Smooth Motion on |
-| `DOL_AURORA_FRAME_INTERP_STEPS` | 1 | 1 for 60 Hz, 3 for 120 Hz |
-| `DOL_AURORA_FRAME_INTERP_PACING` | 60 Hz only | 1 paces 120 Hz too, 0 turns pacing off |
+| `DOL_AURORA_FRAME_INTERP_STEPS` | 1 | in-between frames: 1 for 60 Hz, 3 for 120 Hz, up to 7 (240 Hz) |
+| `DOL_AURORA_FRAME_INTERP_PACING` | 60 and 90 Hz; the game's own speed at any rate | 1 paces the GPU at 120 Hz and up too, 0 turns all pacing off |
 | `DOL_AURORA_PRESENT_CLOCK` | on | 0 keeps the old 60 Hz present timing |
 | `DOL_AURORA_GXCORE_BATCH` | on | 0 turns draw batching off |
 | `DOL_GXCORE_DERIVED_CACHE` | on | 0 derives the pipeline state at every draw |
