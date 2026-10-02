@@ -18,6 +18,9 @@ endif()
 option(COMPOSITE_STATIC
   "Build one relocatable object with bwc_-prefixed symbols for a statically linked host (the Switch NRO) instead of a shared library"
   OFF)
+option(COMPOSITE_STATIC_LINK
+  "With COMPOSITE_STATIC, also link the objects into that object here (off when the compiler cannot, as with switch/composite/clang-switch.cmake)"
+  ON)
 set(COMPOSITE_O1_FALLBACK_SOURCES
   "chunks_d_a_npc_so_148/chunk_0000_rel1_C10800F4.c;chunks_dol/chunk_0140_text1_802316E0.c;chunks_dol/chunk_0202_text1_803296E0.c"
   CACHE STRING "Composite-relative generated sources compiled at O1 when the target uses O2")
@@ -111,11 +114,15 @@ if(COMPOSITE_STATIC)
   # One relocatable object, then every defined global renamed to bwc_<name>:
   # the static counterpart of the shared library's private symbol namespace.
   # The host reaches its exports through runtime/host/src/composite_provider.c.
-  find_program(COMPOSITE_NM NAMES ${CMAKE_NM} nm REQUIRED)
-  find_program(COMPOSITE_OBJCOPY NAMES ${CMAKE_OBJCOPY} objcopy REQUIRED)
+  # The object list, for this link step or one done elsewhere.
   set(COMPOSITE_RSP "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.objects.rsp")
   file(GENERATE OUTPUT "${COMPOSITE_RSP}"
     CONTENT "$<JOIN:$<TARGET_OBJECTS:${MODULE_NAME}>,\n>\n$<JOIN:${DOL_CHUNK_OBJECTS},\n>\n")
+endif()
+
+if(COMPOSITE_STATIC AND COMPOSITE_STATIC_LINK)
+  find_program(COMPOSITE_NM NAMES ${CMAKE_NM} nm REQUIRED)
+  find_program(COMPOSITE_OBJCOPY NAMES ${CMAKE_OBJCOPY} objcopy REQUIRED)
   set(COMPOSITE_COMBINED "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.combined.o")
   set(COMPOSITE_STATIC_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.o")
   add_custom_command(
