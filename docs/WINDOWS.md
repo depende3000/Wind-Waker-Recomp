@@ -188,7 +188,8 @@ menu until you close it):
   frame interpolation; or the experimental 60 Hz game logic; see below), the frame rate counter, the render resolution (the window's own pixels, or 1x to 4x the GameCube's 480 lines),
   texture filtering (up to 16x anisotropic), keeping the picture's shape, pausing while the window is in the
   background, and putting the window back in the middle.
-- *Controls*: the mouse camera, its sensitivity and vertical direction, the fast right-stick camera (or the
+- *Controls*: controller vibration (Enhanced, Classic or Off, its strength, and trigger feedback), the mouse
+  camera, its sensitivity and vertical direction, the fast right-stick camera (or the
   game's own) and its turn and aim speeds, the controller's camera stick directions (for either), and the
   keyboard layout.
 - *Mods*: 4:3, 16:10 or 16:9, Better Wind Waker and each of its options, quick doors, skipping through the
