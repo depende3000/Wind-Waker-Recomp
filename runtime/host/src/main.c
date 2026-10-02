@@ -7035,10 +7035,15 @@ int main(int argc, char** argv) {
             long long seconds = 0;
             if (strcmp(clock_env, "now") == 0) {
                 const time_t now = time(NULL);
+#if defined(__SWITCH__)
+                // newlib's struct tm has no tm_gmtoff; Horizon's clock is local.
+                seconds = (long long)now - 946684800ll;
+#else
                 struct tm local;
                 localtime_r(&now, &local);
                 seconds = (long long)now + (long long)local.tm_gmtoff -
                           946684800ll;
+#endif
             } else {
                 char* clock_end = NULL;
                 seconds = strtoll(clock_env, &clock_end, 10);
