@@ -19,6 +19,12 @@
 # Outputs stay under build/; the NRO contains the translated game code and is
 # for the player's own console only. SWITCH_BUILD_JOBS sets parallel jobs
 # (default: all cores for the composite, 4 in the container).
+# SWITCH_HOST_BUILD_DIR picks the host build directory (relative to the
+# repository; default build/switch-host, or build/switch-host-aurora with
+# --aurora), so an existing Aurora build that has already compiled Dawn can
+# be relinked against a new composite. Dawn's sources, once fetched and
+# patched by scripts/switch/build_dawn_probe.sh, are reused rather than
+# fetched again.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -90,8 +96,14 @@ cmake --build "$composite_build" --parallel "$composite_jobs"
 # holds this machine's absolute paths, so the repository is also mounted there.
 host_build=build/switch-host
 [[ $aurora == ON ]] && host_build=build/switch-host-aurora
+host_build=${SWITCH_HOST_BUILD_DIR:-$host_build}
+dawn_source=""
+if [[ -f $root/build/switch-dawn-probe/_deps/dawn-src/CMakeLists.txt ]]; then
+    dawn_source=/work/build/switch-dawn-probe/_deps/dawn-src
+fi
 container_run "$engine" "$root" -v "$root:$root" -e JOBS="$container_jobs" \
-    -e ROOT="$root" -e AURORA="$aurora" -e HOST_BUILD="$host_build" "$image" bash -lc '
+    -e ROOT="$root" -e AURORA="$aurora" -e HOST_BUILD="$host_build" \
+    -e DAWN_SOURCE="$dawn_source" "$image" bash -lc '
 set -euo pipefail
 export PATH=/opt/devkitpro/devkitA64/bin:$PATH
 composite=$ROOT/build/switch-composite-clang
@@ -101,11 +113,13 @@ cmake -DNM=aarch64-none-elf-nm -DOBJCOPY=aarch64-none-elf-objcopy -DPREFIX=bwc_ 
     -P /work/cmake/composite/prefix_symbols.cmake
 cmake -S /work/switch/host -B "/work/$HOST_BUILD" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release \
-    -DBLUEWAKE_SWITCH_AURORA="$AURORA" -DBLUEWAKE_COMPOSITE_OBJECT="$composite/gGZLE01_recomp.o" >/dev/null
+    -DBLUEWAKE_SWITCH_AURORA="$AURORA" -DBLUEWAKE_COMPOSITE_OBJECT="$composite/gGZLE01_recomp.o" \
+    ${DAWN_SOURCE:+-DFETCHCONTENT_SOURCE_DIR_DAWN=$DAWN_SOURCE} >/dev/null
 cmake --build "/work/$HOST_BUILD" --parallel "$JOBS"
 '
 
 nro="$root/$host_build/BlueWakeSwitch.nro"
+[[ $aurora == ON ]] && nro="$root/$host_build/BlueWakeSwitchAurora.nro"
 if [[ ! -s $nro ]] || [[ $(od -An -tc -j 16 -N4 "$nro" | tr -d ' \n') != NRO0 ]]; then
     echo "build_host: no valid NRO at $nro" >&2
     exit 1

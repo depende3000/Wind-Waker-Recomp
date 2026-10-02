@@ -143,7 +143,11 @@ if(BLUEWAKE_SWITCH_AURORA)
                              "${PORTLIBS_INCLUDE}")
   target_link_options(aurora_smoke PRIVATE "LINKER:--wrap=pthread_create")
   target_link_libraries(aurora_smoke PRIVATE
-    aurora::core aurora::gx aurora::pad aurora::si aurora::os aurora::vi SDL3::SDL3-static nx)
+    aurora::core aurora::gx aurora::pad aurora::si aurora::os aurora::vi SDL3::SDL3-static sqlite3 nx)
+  get_target_property(SMOKE_SQLITE_SOURCES sqlite3 SOURCES)
+  list(GET SMOKE_SQLITE_SOURCES 0 SMOKE_SQLITE_AMALGAMATION)
+  get_filename_component(SMOKE_SQLITE_DIR "${SMOKE_SQLITE_AMALGAMATION}" DIRECTORY)
+  target_include_directories(aurora_smoke PRIVATE "${SMOKE_SQLITE_DIR}")
   nx_generate_nacp(aurora_smoke.nacp
     NAME "Wind Waker Recomp - Aurora test" AUTHOR "Wind Waker Recomp contributors" VERSION "0.1.0")
   nx_create_nro(BlueWakeAuroraSmoke
@@ -154,15 +158,18 @@ if(BLUEWAKE_SWITCH_AURORA)
 endif()
 
 # The name, author and version the Homebrew Menu shows.
+# The two builds have different file names so both can sit on the SD card.
 if(BLUEWAKE_SWITCH_AURORA)
   set(BLUEWAKE_SWITCH_TITLE "Wind Waker Recomp")
+  set(BLUEWAKE_SWITCH_NRO BlueWakeSwitchAurora)
 else()
   set(BLUEWAKE_SWITCH_TITLE "Wind Waker Recomp (headless)")
+  set(BLUEWAKE_SWITCH_NRO BlueWakeSwitch)
 endif()
 nx_generate_nacp(bluewake_switch.nacp
   NAME "${BLUEWAKE_SWITCH_TITLE}" AUTHOR "Wind Waker Recomp contributors" VERSION "0.1.0")
-nx_create_nro(BlueWakeSwitch
+nx_create_nro(${BLUEWAKE_SWITCH_NRO}
   TARGET bluewake_switch_host
-  OUTPUT "${CMAKE_BINARY_DIR}/BlueWakeSwitch.nro"
+  OUTPUT "${CMAKE_BINARY_DIR}/${BLUEWAKE_SWITCH_NRO}.nro"
   NACP bluewake_switch.nacp
   NOICON)

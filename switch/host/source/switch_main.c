@@ -71,6 +71,26 @@ static void default_path(const char* name, const char* value) {
     setenv(name, path, 0);
 }
 
+// Applies DATA_ROOT/env.txt: one NAME=value per line, # for comments. Set
+// before the defaults below, so it overrides them, and lets a run be
+// configured by copying one small file instead of rebuilding the NRO.
+static void load_env_file(void) {
+    FILE* file = fopen(DATA_ROOT "/env.txt", "r");
+    if (file == NULL)
+        return;
+    char line[512];
+    while (fgets(line, sizeof line, file) != NULL) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char* equals = strchr(line, '=');
+        if (line[0] == '#' || line[0] == '\0' || equals == NULL)
+            continue;
+        *equals = '\0';
+        setenv(line, equals + 1, 1);
+        fprintf(stderr, "[switch] env.txt: %s=%s\n", line, equals + 1);
+    }
+    fclose(file);
+}
+
 static bool file_exists(const char* path) {
     struct stat info;
     return stat(path, &info) == 0;
@@ -97,7 +117,11 @@ int main(int argc, char** argv) {
     fprintf(stderr, "[switch] host starting; usb live log=%s, log=%s/host.log\n",
             usb ? "started" : "unavailable", DATA_ROOT);
 
+    load_env_file();
     setenv("BLUEWAKE_ROOT", DATA_ROOT, 0);
+    // One line a second of wall time with the guest's retrace rate (60 is
+    // full speed).
+    setenv("BLUEWAKE_PERF_LOG", "1", 0);
     setenv("BLUEWAKE_RENDERER", RENDERER, 0);
     // Aurora's shader and pipeline caches (sqlite). No "sdmc:" device prefix:
     // sqlite takes a path not starting with '/' as relative.
