@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -335,6 +336,129 @@ bool log_egl_capabilities() {
     return robustness_available;
 }
 
+void log_adapter_limits(const wgpu::Adapter& adapter) {
+    wgpu::CompatibilityModeLimits compat = {};
+    wgpu::Limits limits = {};
+    limits.nextInChain = &compat;
+    if (!adapter.GetLimits(&limits)) {
+        log_message("[limits] GetLimits failed\n");
+        return;
+    }
+    log_message("[limits] storage_buffers_in_vertex=%u in_fragment=%u per_stage=%u "
+                "(Aurora needs 2 in vertex)\n",
+                compat.maxStorageBuffersInVertexStage, compat.maxStorageBuffersInFragmentStage,
+                limits.maxStorageBuffersPerShaderStage);
+    log_message("[limits] texture2d=%u bind_groups=%u uniform_per_stage=%u "
+                "sampled_per_stage=%u samplers_per_stage=%u\n",
+                limits.maxTextureDimension2D, limits.maxBindGroups,
+                limits.maxUniformBuffersPerShaderStage, limits.maxSampledTexturesPerShaderStage,
+                limits.maxSamplersPerShaderStage);
+    log_message("[limits] uniform_binding=%llu storage_binding=%llu uniform_align=%u "
+                "storage_align=%u inter_stage=%u vertex_attributes=%u\n",
+                static_cast<unsigned long long>(limits.maxUniformBufferBindingSize),
+                static_cast<unsigned long long>(limits.maxStorageBufferBindingSize),
+                limits.minUniformBufferOffsetAlignment, limits.minStorageBufferOffsetAlignment,
+                limits.maxInterStageShaderVariables, limits.maxVertexAttributes);
+}
+
+// Aurora's per-frame cost on this path: draw at its 960x720 EFB size, copy to
+// a mapped buffer and wait (glFinish per submission), from a worker thread.
+void run_threaded_frames(const wgpu::Instance& instance, const wgpu::Device& device,
+                         const wgpu::RenderPipeline& pipeline, const wgpu::BindGroup& bind_group,
+                         const wgpu::Buffer& vertex_buffer) {
+    constexpr uint32_t kWidth = 960;
+    constexpr uint32_t kHeight = 720;
+    constexpr uint32_t kRowBytes = kWidth * kBytesPerPixel;  // a multiple of 256
+    constexpr int kFrames = 300;
+
+    wgpu::TextureDescriptor color_descriptor = {};
+    color_descriptor.size = {kWidth, kHeight, 1};
+    color_descriptor.format = wgpu::TextureFormat::RGBA8Unorm;
+    color_descriptor.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+    wgpu::Texture color = device.CreateTexture(&color_descriptor);
+    wgpu::TextureDescriptor depth_descriptor = {};
+    depth_descriptor.size = {kWidth, kHeight, 1};
+    depth_descriptor.format = wgpu::TextureFormat::Depth24Plus;
+    depth_descriptor.usage = wgpu::TextureUsage::RenderAttachment;
+    wgpu::Texture depth = device.CreateTexture(&depth_descriptor);
+    wgpu::TextureView color_view = color.CreateView();
+    wgpu::TextureView depth_view = depth.CreateView();
+    wgpu::BufferDescriptor readback_descriptor = {};
+    readback_descriptor.size = static_cast<uint64_t>(kRowBytes) * kHeight;
+    readback_descriptor.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
+    wgpu::Buffer readback = device.CreateBuffer(&readback_descriptor);
+
+    u64 slowest = 0;
+    int completed = 0;
+    const u64 start = armGetSystemTick();
+    for (int frame = 0; frame < kFrames; ++frame) {
+        const u64 frame_start = armGetSystemTick();
+        wgpu::RenderPassColorAttachment color_attachment = {};
+        color_attachment.view = color_view;
+        color_attachment.loadOp = wgpu::LoadOp::Clear;
+        color_attachment.storeOp = wgpu::StoreOp::Store;
+        color_attachment.clearValue = {0.04, 0.08, 0.16, 1.0};
+        wgpu::RenderPassDepthStencilAttachment depth_attachment = {};
+        depth_attachment.view = depth_view;
+        depth_attachment.depthLoadOp = wgpu::LoadOp::Clear;
+        depth_attachment.depthStoreOp = wgpu::StoreOp::Store;
+        depth_attachment.depthClearValue = 1.0f;
+        wgpu::RenderPassDescriptor pass_descriptor = {};
+        pass_descriptor.colorAttachmentCount = 1;
+        pass_descriptor.colorAttachments = &color_attachment;
+        pass_descriptor.depthStencilAttachment = &depth_attachment;
+
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&pass_descriptor);
+        pass.SetPipeline(pipeline);
+        pass.SetBindGroup(0, bind_group);
+        pass.SetVertexBuffer(0, vertex_buffer);
+        pass.Draw(18, 1, 0, 0);
+        pass.End();
+        wgpu::TexelCopyTextureInfo source = {};
+        source.texture = color;
+        wgpu::TexelCopyBufferInfo destination = {};
+        destination.buffer = readback;
+        destination.layout.bytesPerRow = kRowBytes;
+        destination.layout.rowsPerImage = kHeight;
+        const wgpu::Extent3D extent = {kWidth, kHeight, 1};
+        encoder.CopyTextureToBuffer(&source, &destination, &extent);
+        wgpu::CommandBuffer commands = encoder.Finish();
+        device.GetQueue().Submit(1, &commands);
+
+        bool mapped = false;
+        const wgpu::Future future = readback.MapAsync(
+            wgpu::MapMode::Read, 0, readback_descriptor.size, wgpu::CallbackMode::WaitAnyOnly,
+            [&mapped](wgpu::MapAsyncStatus status, wgpu::StringView) {
+                mapped = status == wgpu::MapAsyncStatus::Success;
+            });
+        wgpu::WaitStatus wait = wgpu::WaitStatus::TimedOut;
+        for (int attempt = 0; attempt < 5000 && wait == wgpu::WaitStatus::TimedOut; ++attempt) {
+            wait = instance.WaitAny(future, 0);
+            if (wait == wgpu::WaitStatus::TimedOut)
+                svcSleepThread(100'000);
+        }
+        if (wait != wgpu::WaitStatus::Success || !mapped) {
+            log_message("[perf] frame %d readback failed (wait=%u)\n", frame,
+                        static_cast<unsigned>(wait));
+            break;
+        }
+        readback.Unmap();
+        const u64 ticks = armGetSystemTick() - frame_start;
+        if (ticks > slowest)
+            slowest = ticks;
+        ++completed;
+    }
+    const u64 total_ns = armTicksToNs(armGetSystemTick() - start);
+    if (completed == 0)
+        return;
+    log_message("[perf] worker thread: %d/%d frames at %ux%u with readback; "
+                "avg %.2f ms, slowest %.2f ms (%.1f fps)\n",
+                completed, kFrames, kWidth, kHeight,
+                total_ns / 1e6 / completed, armTicksToNs(slowest) / 1e6,
+                completed * 1e9 / static_cast<double>(total_ns));
+}
+
 bool render_with_dawn(std::vector<uint8_t>& pixels) {
     // Initialize the shared default display first so the log captures the
     // platform extension set even if Dawn rejects adapter discovery.
@@ -386,14 +510,18 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
     log_wgpu_message("[dawn] adapter description: ", adapter_info.description);
     log_wgpu_message("[dawn] adapter vendor: ", adapter_info.vendor);
     log_wgpu_message("[dawn] adapter device: ", adapter_info.device);
+    log_adapter_limits(adapter);
 
     wgpu::DeviceDescriptor device_descriptor = {};
     wgpu::DawnTogglesDescriptor device_toggles = {};
-    const char* disable_robustness = "disable_robustness";
+    // Aurora renders from worker threads and enables this toggle; the threaded
+    // phase below exercises it.
+    std::array<const char*, 2> enabled_toggles = {{"gl_allow_context_on_multi_threads",
+                                                   "disable_robustness"}};
+    device_toggles.enabledToggleCount = egl_robustness_available ? 1 : 2;
+    device_toggles.enabledToggles = enabled_toggles.data();
+    device_descriptor.nextInChain = &device_toggles;
     if (!egl_robustness_available) {
-        device_toggles.enabledToggleCount = 1;
-        device_toggles.enabledToggles = &disable_robustness;
-        device_descriptor.nextInChain = &device_toggles;
         log_message("[dawn] WARNING: disabling WebGPU robust buffer access for this diagnostic "
                     "because EGL has no robust-context support; not suitable for production\n");
     }
@@ -593,6 +721,12 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
     const bool verified = verify_readback(pixels);
     log_message("[dawn] Dawn OpenGLES offscreen test %s\n",
                 verified ? "passed" : "failed pixel checks");
+    if (verified) {
+        // The device was created on this thread; Aurora submits from others.
+        std::thread perf([&] { run_threaded_frames(instance, device, pipeline, bind_group,
+                                                   vertex_buffer); });
+        perf.join();
+    }
 
     device = nullptr;
     instance = nullptr;

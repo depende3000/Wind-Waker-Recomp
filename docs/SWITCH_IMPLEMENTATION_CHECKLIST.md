@@ -26,6 +26,7 @@
 - [x] Added `scripts/switch/push.sh`: copies NROs to `sdmc:/switch/wind-waker-recomp/` over the console's USB file transfer (MTP), reads each back to check its SHA-256, and pulls probe logs with `--logs`.
 - [x] Fixed the last probe bug: compatibility mode rejects `@interpolate(flat)` (implicitly `flat, first`), so the shader uses `flat, either`.
 - [x] **Dawn OpenGLES offscreen probe passes on physical hardware** (`87f88dd2…`, two runs, live USB log). Quadrants read back 255,0,0 / 5,138,20 / 5,10,148 / 255,255,0 — the two 50%-alpha quadrants match the expected blend with the clear color exactly — and the green quad occludes the red one (center 0,255,0). The app presents the readback and exits cleanly. This runs with robustness disabled and a `glFinish` per submission; it is not Aurora/GX, not a Dawn surface, and its cost is unmeasured.
+- [ ] Run the probe build that retires the Aurora audit's top risks: it logs adapter limits (Aurora needs 2 storage buffers in the vertex stage), enables `gl_allow_context_on_multi_threads` as Aurora does, and times 300 frames at 960x720 with readback from a worker thread.
 
 ## Current Dawn diagnostic artifact
 
@@ -45,7 +46,7 @@ The NRO has **not** been run after the latest changes. Cross-build success does 
 - [x] Confirm the result image appears on screen, **+** exits cleanly, and the NRO does not hang or crash.
 - [ ] If adapter discovery succeeds but context creation fails, investigate Dawn's config/context path. The reported `surfaceless=yes` and `pbuffer_config=unavailable` need to be reconciled with the pinned Dawn context setup.
 - [ ] Treat the `glFinish` and disabled-robustness modes strictly as diagnostic workarounds. They are synchronous, slow, do not support shared-fence export, and are not suitable for untrusted shaders or a production game build.
-- [ ] Re-run the corrected GLES probe for 10 minutes and retain its log. Confirm the visible draw and framebuffer copy remain stable. The earlier short logs are not a soak test.
+- [x] GLES soak: 1,286 s (21.4 minutes), 72,019 frames at a steady 60 FPS, framebuffer copy passing throughout, clean exit. Two pauses of 31 s and 60 s (the app in the background) resumed at 60 FPS on their own.
 
 ## Renderer gate — still open
 
