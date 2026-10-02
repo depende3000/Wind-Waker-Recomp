@@ -1,6 +1,7 @@
 // Switch entry point for the headless milestone: prepares the SD-card paths
-// and environment main.c expects, sends stdout/stderr to a log on the SD card
-// and to the live USB log, runs the host, and waits for + once it returns.
+// and environment main.c expects, sends stdout/stderr to the screen (libnx's
+// text console), a log on the SD card and the live USB log, runs the host,
+// and waits for + once it returns.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,15 +16,32 @@
 int bluewake_host_main(int argc, char** argv);
 
 static FILE* g_log;
+static const devoptab_t* g_console;  // libnx's console device, saved before the tee
+static Mutex g_output_lock;           // the host and the DSP print from several threads
+static u64 g_console_presented;       // tick of the last consoleUpdate
+
+// Presents the console at most ten times a second: each update queues a
+// framebuffer, and the guest must not wait on the display.
+static void present_console(bool force) {
+    const u64 now = armGetSystemTick();
+    if (force || armTicksToNs(now - g_console_presented) >= 100000000ULL) {
+        consoleUpdate(NULL);
+        g_console_presented = now;
+    }
+}
 
 static ssize_t tee_write(struct _reent* r, void* fd, const char* data, size_t size) {
-    (void)r;
-    (void)fd;
+    mutexLock(&g_output_lock);
+    if (g_console != NULL && g_console->write_r != NULL) {
+        g_console->write_r(r, fd, data, size);
+        present_console(false);
+    }
     if (g_log != NULL) {
         fwrite(data, 1, size, g_log);
         fflush(g_log);
     }
     usb_log_write(data, size);
+    mutexUnlock(&g_output_lock);
     return (ssize_t)size;
 }
 
@@ -50,10 +68,15 @@ int main(int argc, char** argv) {
     mkdir(DATA_ROOT "/states", 0777);
     g_log = fopen(DATA_ROOT "/host.log", "w");
     const bool usb = usb_log_start();
+    mutexInit(&g_output_lock);
+    consoleInit(NULL);
+    g_console = devoptab_list[STD_OUT];
     devoptab_list[STD_OUT] = &g_tee;
     devoptab_list[STD_ERR] = &g_tee;
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    fprintf(stderr, "Wind Waker Recomp for Switch - headless build: no picture, sound or\n"
+                    "controls yet. The game runs for about a minute and logs its progress.\n\n");
     fprintf(stderr, "[switch] host starting; usb live log=%s, log=%s/host.log\n",
             usb ? "started" : "unavailable", DATA_ROOT);
 
@@ -95,9 +118,15 @@ int main(int argc, char** argv) {
         padUpdate(&pad);
         if ((padGetButtonsDown(&pad) & HidNpadButton_Plus) != 0)
             break;
+        mutexLock(&g_output_lock);
+        present_console(true);
+        mutexUnlock(&g_output_lock);
         svcSleepThread(16000000ULL);
     }
     usb_log_stop(2000);
+    devoptab_list[STD_OUT] = g_console;
+    devoptab_list[STD_ERR] = g_console;
+    consoleExit(NULL);
     if (g_log != NULL)
         fclose(g_log);
     return status;
