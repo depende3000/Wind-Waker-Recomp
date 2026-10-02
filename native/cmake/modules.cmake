@@ -26,7 +26,8 @@ set(TWW_MODULES_READY
         JSystem-core
         JSystem-J3D
         JSystem-2D-particle
-        JSystem-studio)
+        JSystem-studio
+        framework)
 
 set(TWW_ACTOR_CHUNKS 6)
 
