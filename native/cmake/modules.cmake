@@ -30,7 +30,8 @@ set(TWW_MODULES_READY
         framework
         m_Do
         d-core
-        actors-1)
+        actors-1
+        actors-2)
 
 set(TWW_ACTOR_CHUNKS 6)
 
