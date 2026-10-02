@@ -97,12 +97,8 @@ set(GXRUNTIME_ENABLE_AURORA_RECOMP ON CACHE BOOL "" FORCE)
 # creates. sqlite (Aurora's pipeline cache) without WAL or memory-mapped
 # files, which need mmap.
 function(aurora_switch_configure_targets)
-  # Offscreen rendering and presentation through the libnx framebuffer
-  # (switch_present.cpp, used by the gpu.cpp and aurora.cpp patches), and
-  # Mesa's EGL/GLES, which Dawn reaches through eglGetProcAddress.
-  target_sources(aurora_core PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/switch_present.cpp")
-  target_include_directories(aurora_core PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
-                             "${DEVKITPRO_ROOT}/portlibs/switch/include")
+  # Mesa's EGL/GLES, which Dawn reaches through eglGetProcAddress (patch 0004).
+  target_include_directories(aurora_core PRIVATE "${DEVKITPRO_ROOT}/portlibs/switch/include")
   target_link_directories(aurora_core PUBLIC "${DEVKITPRO_ROOT}/portlibs/switch/lib")
   target_link_libraries(aurora_core PUBLIC EGL GLESv2 glapi drm_nouveau nx)
   # ImGui's default "open in shell" uses fork/exec/waitpid.
@@ -113,5 +109,9 @@ function(aurora_switch_configure_targets)
     target_compile_definitions(sqlite3 PRIVATE SQLITE_OMIT_WAL=1 SQLITE_MAX_MMAP_SIZE=0
                                SQLITE_OMIT_LOAD_EXTENSION=1 SQLITE_THREADSAFE=1)
     target_sources(sqlite3 PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/sqlite_horizon.c")
+    get_target_property(SQLITE_SOURCES sqlite3 SOURCES)
+    list(GET SQLITE_SOURCES 0 SQLITE_AMALGAMATION)
+    get_filename_component(SQLITE_DIR "${SQLITE_AMALGAMATION}" DIRECTORY)
+    target_include_directories(sqlite3 PRIVATE "${SQLITE_DIR}")
   endif()
 endfunction()

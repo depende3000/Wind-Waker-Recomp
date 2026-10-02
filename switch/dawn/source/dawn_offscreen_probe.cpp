@@ -778,6 +778,191 @@ bool render_with_dawn(std::vector<uint8_t>& pixels, const char* label,
     return verified;
 }
 
+// Scenario F: present straight to libnx's window through a Dawn surface (the
+// NWindow carried in the Android native window source, an EGL window surface)
+// instead of reading frames back. Clears the screen to a cycling color for 300
+// frames and times them.
+// label names the scenario; threading_toggle is "gl_defer" or nullptr; green
+// selects the green colour ramp (F2) instead of blue to pink (F).
+bool present_to_window(const char* label, const char* threading_toggle, bool green) {
+    log_message("[scenario] %s: Dawn surface on libnx's NWindow, toggle %s, 180 presented frames\n",
+                label, threading_toggle != nullptr ? threading_toggle : "none");
+    static const bool egl_robustness_available = log_egl_capabilities();
+    wgpu::InstanceDescriptor instance_descriptor = {};
+    dawn::native::Instance native_instance(&instance_descriptor);
+    wgpu::Instance instance(native_instance.Get());
+    dawn::native::opengl::RequestAdapterOptionsGetGLProc get_gl_proc;
+    get_gl_proc.getProc = reinterpret_cast<dawn::native::opengl::EGLGetProcProc>(eglGetProcAddress);
+    get_gl_proc.display = EGL_NO_DISPLAY;
+    wgpu::RequestAdapterOptions adapter_options = {};
+    adapter_options.nextInChain = &get_gl_proc;
+    adapter_options.backendType = wgpu::BackendType::OpenGLES;
+    adapter_options.featureLevel = wgpu::FeatureLevel::Compatibility;
+    const std::vector<dawn::native::Adapter> adapters = native_instance.EnumerateAdapters(&adapter_options);
+    if (adapters.empty()) {
+        log_message("[surface] no adapter\n");
+        return false;
+    }
+    wgpu::Adapter adapter(adapters.front().Get());
+    wgpu::DeviceDescriptor device_descriptor = {};
+    wgpu::DawnTogglesDescriptor toggles = {};
+    std::array<const char*, 2> toggle_names = {};
+    size_t toggle_count = 0;
+    if (threading_toggle != nullptr)
+        toggle_names[toggle_count++] = threading_toggle;
+    if (!egl_robustness_available)
+        toggle_names[toggle_count++] = "disable_robustness";
+    toggles.enabledToggleCount = toggle_count;
+    toggles.enabledToggles = toggle_names.data();
+    device_descriptor.nextInChain = &toggles;
+    device_descriptor.SetUncapturedErrorCallback(
+        [](const wgpu::Device&, wgpu::ErrorType type, wgpu::StringView message) {
+            char prefix[48];
+            snprintf(prefix, sizeof(prefix), "[surface:error:%u] ", static_cast<unsigned>(type));
+            log_wgpu_message(prefix, message);
+        });
+    wgpu::Device device = adapter.CreateDevice(&device_descriptor);
+    if (device == nullptr) {
+        log_message("[surface] device creation failed\n");
+        return false;
+    }
+
+    NWindow* window = nwindowGetDefault();
+    nwindowSetDimensions(window, kDisplayWidth, kDisplayHeight);
+    wgpu::SurfaceSourceAndroidNativeWindow window_source = {};
+    window_source.window = window;
+    wgpu::SurfaceDescriptor surface_descriptor = {};
+    surface_descriptor.nextInChain = &window_source;
+    wgpu::Surface surface = instance.CreateSurface(&surface_descriptor);
+    if (surface == nullptr) {
+        log_message("[surface] CreateSurface failed\n");
+        return false;
+    }
+    wgpu::SurfaceCapabilities capabilities = {};
+    surface.GetCapabilities(adapter, &capabilities);
+    log_message("[surface] %zu formats, first %u; %zu present modes\n", capabilities.formatCount,
+                capabilities.formatCount > 0 ? static_cast<unsigned>(capabilities.formats[0]) : 0u,
+                capabilities.presentModeCount);
+    if (capabilities.formatCount == 0) {
+        return false;
+    }
+    wgpu::SurfaceConfiguration configuration = {};
+    configuration.device = device;
+    configuration.format = capabilities.formats[0];
+    configuration.usage = wgpu::TextureUsage::RenderAttachment;
+    configuration.width = kDisplayWidth;
+    configuration.height = kDisplayHeight;
+    configuration.presentMode = wgpu::PresentMode::Fifo;
+    surface.Configure(&configuration);
+
+    constexpr int kFrames = 180;
+    u64 slowest = 0;
+    int presented = 0;
+    const u64 start = armGetSystemTick();
+    for (int frame = 0; frame < kFrames; ++frame) {
+        const u64 frame_start = armGetSystemTick();
+        wgpu::SurfaceTexture surface_texture;
+        surface.GetCurrentTexture(&surface_texture);
+        if (surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessOptimal &&
+            surface_texture.status != wgpu::SurfaceGetCurrentTextureStatus::SuccessSuboptimal) {
+            log_message("[surface] frame %d: GetCurrentTexture status %u\n", frame,
+                        static_cast<unsigned>(surface_texture.status));
+            break;
+        }
+        const double t = frame / static_cast<double>(kFrames);
+        wgpu::RenderPassColorAttachment attachment = {};
+        attachment.view = surface_texture.texture.CreateView();
+        attachment.loadOp = wgpu::LoadOp::Clear;
+        attachment.storeOp = wgpu::StoreOp::Store;
+        attachment.clearValue = green ? wgpu::Color{0.0, 0.3 + 0.7 * t, 0.1, 1.0}
+                                      : wgpu::Color{t, 0.4, 1.0 - t, 1.0};
+        wgpu::RenderPassDescriptor pass_descriptor = {};
+        pass_descriptor.colorAttachmentCount = 1;
+        pass_descriptor.colorAttachments = &attachment;
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        encoder.BeginRenderPass(&pass_descriptor).End();
+        wgpu::CommandBuffer commands = encoder.Finish();
+        device.GetQueue().Submit(1, &commands);
+        if (!surface.Present()) {
+            log_message("[surface] frame %d: Present failed\n", frame);
+            break;
+        }
+        const u64 ticks = armGetSystemTick() - frame_start;
+        if (ticks > slowest)
+            slowest = ticks;
+        ++presented;
+    }
+    const u64 total_ns = armTicksToNs(armGetSystemTick() - start);
+    if (presented > 0)
+        log_message("[perf] window surface: %d/%d frames presented; avg %.2f ms, slowest %.2f ms "
+                    "(%.1f fps)\n",
+                    presented, kFrames, total_ns / 1e6 / presented, armTicksToNs(slowest) / 1e6,
+                    presented * 1e9 / static_cast<double>(total_ns));
+    surface.Unconfigure();
+    surface = nullptr;
+    device = nullptr;
+    log_message("[scenario] %s: %s (presented without error; whether it showed is seen on screen)\n",
+                label, presented == kFrames ? "PASS" : "FAIL");
+    return presented == kFrames;
+}
+
+// Scenario G, the reference: plain EGL and GLES on libnx's window, no Dawn.
+// Clears to a yellow ramp for 180 frames.
+bool present_with_plain_egl() {
+    log_message("[scenario] G: plain EGL window surface and GLES clears, no Dawn\n");
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) {
+        log_message("[plain-egl] eglInitialize failed: 0x%x\n", eglGetError());
+        return false;
+    }
+    eglBindAPI(EGL_OPENGL_ES_API);
+    const EGLint config_attributes[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+                                        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+                                        EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
+                                        EGL_ALPHA_SIZE, 8, EGL_NONE};
+    EGLConfig config = nullptr;
+    EGLint config_count = 0;
+    if (!eglChooseConfig(display, config_attributes, &config, 1, &config_count) ||
+        config_count == 0) {
+        log_message("[plain-egl] no window config: 0x%x\n", eglGetError());
+        return false;
+    }
+    NWindow* window = nwindowGetDefault();
+    nwindowSetDimensions(window, kDisplayWidth, kDisplayHeight);
+    EGLSurface surface = eglCreateWindowSurface(display, config, window, nullptr);
+    const EGLint context_attributes[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attributes);
+    if (surface == EGL_NO_SURFACE || context == EGL_NO_CONTEXT ||
+        !eglMakeCurrent(display, surface, surface, context)) {
+        log_message("[plain-egl] surface/context/make-current failed: 0x%x\n", eglGetError());
+        return false;
+    }
+    EGLint width = -1, height = -1;
+    eglQuerySurface(display, surface, EGL_WIDTH, &width);
+    eglQuerySurface(display, surface, EGL_HEIGHT, &height);
+    log_message("[plain-egl] eglQuerySurface before the first frame: %dx%d\n", width, height);
+    auto glClearColorFn = reinterpret_cast<void (*)(float, float, float, float)>(
+        eglGetProcAddress("glClearColor"));
+    auto glClearFn = reinterpret_cast<void (*)(unsigned)>(eglGetProcAddress("glClear"));
+    const u64 start = armGetSystemTick();
+    for (int frame = 0; frame < 180; ++frame) {
+        const float t = frame / 180.0f;
+        glClearColorFn(0.6f + 0.4f * t, 0.6f + 0.4f * t, 0.0f, 1.0f);
+        glClearFn(0x00004000);  // GL_COLOR_BUFFER_BIT
+        eglSwapBuffers(display, surface);
+    }
+    eglQuerySurface(display, surface, EGL_WIDTH, &width);
+    eglQuerySurface(display, surface, EGL_HEIGHT, &height);
+    log_message("[plain-egl] eglQuerySurface after 180 frames: %dx%d\n", width, height);
+    log_message("[plain-egl] 180 frames, avg %.2f ms\n",
+                armTicksToNs(armGetSystemTick() - start) / 1e6 / 180);
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext(display, context);
+    eglDestroySurface(display, surface);
+    log_message("[scenario] G: done (whether it showed is seen on screen)\n");
+    return true;
+}
+
 void fill_failure_frame(uint8_t* framebuffer, uint32_t stride) {
     for (uint32_t y = 0; y < kDisplayHeight; ++y) {
         uint8_t* row = framebuffer + static_cast<size_t>(y) * stride;
@@ -880,6 +1065,11 @@ int main(int, char**) {
     run_on_worker([&] { render_with_dawn(scratch, "D", nullptr, false, true); });
     log_message("[probe] result=%s\n", success ? "PASS" : "FAIL");
     const bool display_ok = present_readback(pixels, success);
+    // After the readback screen has released the window's framebuffer:
+    // F blue to pink, F2 green, G yellow, about three seconds each.
+    present_to_window("F", "gl_defer", false);
+    present_to_window("F2", nullptr, true);
+    present_with_plain_egl();
     // Mesa's EGL display outlives Dawn: without terminating it, the Homebrew Menu
     // that hbloader loads next into this process crashed on every exit
     // (nx-hbmenu + 0xf6b34, Atmosphère 2168-0002).

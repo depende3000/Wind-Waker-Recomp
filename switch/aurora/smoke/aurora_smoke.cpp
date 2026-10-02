@@ -1,7 +1,7 @@
 // Aurora smoke test for the Switch: the renderer stack without the game.
 // Starts Aurora (the SDL 3 shim's window, Dawn's OpenGL ES device with
-// gl_defer), presents frames through the libnx framebuffer with an ImGui
-// window showing the GameCube pad Aurora reads from the controller, and plays
+// gl_defer), presents frames to libnx's window through a Dawn surface with an
+// ImGui window showing the GameCube pad Aurora reads from the controller, and plays
 // a tone through the shim's audout stream while A is held. + (GameCube Start)
 // exits. Log: sdmc:/switch/wind-waker-recomp/aurora-smoke.log and the live USB
 // log.
@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <switch.h>
+#include <sys/iosupport.h>
 
 #include "usb_log.h"
 
@@ -44,6 +45,17 @@ void log_line(const char* format, ...) {
   usb_log_write(line, size);
 }
 
+// stderr (Dawn, Aurora) goes to the same log.
+ssize_t stderr_write(struct _reent*, void*, const char* data, size_t size) {
+  if (g_log != nullptr) {
+    std::fwrite(data, 1, size, g_log);
+    std::fflush(g_log);
+  }
+  usb_log_write(data, size);
+  return static_cast<ssize_t>(size);
+}
+const devoptab_t g_stderr_device = {.name = "log", .write_r = stderr_write};
+
 void aurora_log(AuroraLogLevel level, const char* module, const char* message, unsigned int length) {
   static const char* const kLevels[] = {"debug", "info", "warn", "error", "fatal"};
   log_line("[aurora:%s] %s: %.*s\n", kLevels[level <= LOG_FATAL ? level : LOG_FATAL], module,
@@ -67,6 +79,8 @@ void push_tone(SDL_AudioStream* stream, double& phase) {
 int main(int argc, char** argv) {
   usb_log_start();
   g_log = std::fopen("sdmc:/switch/wind-waker-recomp/aurora-smoke.log", "w");
+  devoptab_list[STD_ERR] = &g_stderr_device;
+  setvbuf(stderr, nullptr, _IONBF, 0);
   log_line("[smoke] Aurora smoke test started\n");
 
   AuroraConfig config{};
@@ -97,9 +111,13 @@ int main(int argc, char** argv) {
   double phase = 0.0;
   uint64_t frames = 0;
   uint64_t presented = 0;
+  // The main loop's own split, logged with the fps line.
+  uint64_t updateUs = 0, beginUs = 0, endUs = 0;
+  auto since = [](uint64_t tick) { return armTicksToNs(armGetSystemTick() - tick) / 1000; };
   const uint64_t start = armGetSystemTick();
   bool running = true;
   while (running) {
+    const uint64_t updateStart = armGetSystemTick();
     for (const AuroraEvent* event = aurora_update(); event != nullptr && event->type != AURORA_NONE; ++event) {
       if (event->type == AURORA_EXIT) {
         running = false;
@@ -114,8 +132,12 @@ int main(int argc, char** argv) {
     if (audio != nullptr && (pad.button & PAD_BUTTON_A) != 0 && SDL_GetAudioStreamQueued(audio) < 32000) {
       push_tone(audio, phase);
     }
+    updateUs += since(updateStart);
     ++frames;
-    if (!aurora_begin_frame()) {
+    const uint64_t beginStart = armGetSystemTick();
+    const bool began = aurora_begin_frame();
+    beginUs += since(beginStart);
+    if (!began) {
       continue;
     }
     ++presented;
@@ -129,11 +151,15 @@ int main(int argc, char** argv) {
     ImGui::Text("Triggers L %3u R %3u", pad.triggerLeft, pad.triggerRight);
     ImGui::Text("Hold A for a 440 Hz tone. + exits.");
     ImGui::End();
+    const uint64_t endStart = armGetSystemTick();
     aurora_end_frame();
+    endUs += since(endStart);
     if (presented == 1 || presented % 300 == 0) {
-      log_line("[smoke] presented=%llu loops=%llu fps=%.1f pad_err=%d buttons=0x%04X\n",
+      log_line("[smoke] presented=%llu loops=%llu fps=%.1f pad_err=%d buttons=0x%04X "
+               "avg ms: update %.2f begin %.2f end %.2f\n",
                static_cast<unsigned long long>(presented), static_cast<unsigned long long>(frames),
-               seconds > 0 ? presented / seconds : 0.0, pad.err, pad.button);
+               seconds > 0 ? presented / seconds : 0.0, pad.err, pad.button, updateUs / 1000.0 / frames,
+               beginUs / 1000.0 / frames, endUs / 1000.0 / presented);
     }
   }
 

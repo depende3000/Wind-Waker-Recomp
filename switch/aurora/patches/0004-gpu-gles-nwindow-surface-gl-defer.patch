@@ -1,0 +1,93 @@
+--- a/graphics/aurora/lib/webgpu/gpu.cpp
++++ b/graphics/aurora/lib/webgpu/gpu.cpp
+@@ -27,6 +27,15 @@
+ #include <dawn/native/DawnNative.h>
+ #endif
+ 
++#if defined(__SWITCH__)
++// Dawn's OpenGL ES backend on Mesa's EGL. Its window surface is libnx's
++// NWindow, carried in the Android native window source
++// (switch/dawn/patches/dawn-switch-nwindow-surface.patch).
++#include <EGL/egl.h>
++#include <dawn/native/OpenGLBackend.h>
++#include <switch.h>
++#endif
++
+ namespace aurora::gx {
+ void clear_copy_texture_cache() noexcept;
+ } // namespace aurora::gx
+@@ -736,6 +745,28 @@
+ }
+ 
+ static bool create_surface() {
++#if defined(__SWITCH__)
++  {
++    window::SurfaceLock surfaceLock;
++    // The window needs its buffer size set before EGL draws to it, as libnx's
++    // own framebuffer API does.
++    NWindow* window = nwindowGetDefault();
++    nwindowSetDimensions(window, 1280, 720);
++    wgpu::SurfaceSourceAndroidNativeWindow nwindow;
++    nwindow.window = window;
++    const wgpu::SurfaceDescriptor switchSurfaceDescriptor{
++        .nextInChain = &nwindow,
++        .label = "Surface",
++    };
++    release_surface_locked();
++    g_surface = g_instance.CreateSurface(&switchSurfaceDescriptor);
++    if (!g_surface) {
++      Log.error("Failed to create surface");
++      return false;
++    }
++    return true;
++  }
++#endif
+   SDL_Window* window = window::get_sdl_window();
+   if (window == nullptr) {
+     Log.error("Failed to create surface: no window");
+@@ -785,7 +816,12 @@
+       return false;
+     }
+   }
++#if defined(__SWITCH__)
++  (void)auroraBackend;
++  const wgpu::BackendType backend = wgpu::BackendType::OpenGLES;
++#else
+   const wgpu::BackendType backend = to_wgpu_backend(auroraBackend);
++#endif
+   Log.info("Attempting to initialize {}", magic_enum::enum_name(backend));
+ #if 0
+   // D3D12's debug layer is very slow
+@@ -796,7 +832,17 @@
+     return false;
+   }
+   {
++#if defined(__SWITCH__)
++    // Dawn finds Mesa's EGL through eglGetProcAddress (its dlopen path is
++    // patched out for Horizon) and uses the default display.
++    dawn::native::opengl::RequestAdapterOptionsGetGLProc glProc;
++    glProc.getProc = reinterpret_cast<dawn::native::opengl::EGLGetProcProc>(eglGetProcAddress);
++    glProc.display = EGL_NO_DISPLAY;
++#endif
+     const wgpu::RequestAdapterOptions options{
++#if defined(__SWITCH__)
++        .nextInChain = &glProc,
++#endif
+         .featureLevel = wgpu::FeatureLevel::Compatibility,
+         .powerPreference = wgpu::PowerPreference::HighPerformance,
+         .backendType = backend,
+@@ -962,7 +1008,14 @@
+         "allow_unsafe_apis",
+         "disable_symbol_renaming",
+         "enable_immediate_error_handling",
++#if defined(__SWITCH__)
++        // Mesa on the Switch draws nothing through the shared context
++        // gl_allow_context_on_multi_threads creates; gl_defer runs all GL work
++        // at Submit with one context, from any thread (tested on the console).
++        "gl_defer",
++#else
+         "gl_allow_context_on_multi_threads",
++#endif
+     };
+     constexpr std::array disableToggles{
+         "timestamp_quantization",

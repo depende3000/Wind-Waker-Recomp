@@ -17,8 +17,8 @@
 
 #define DATA_ROOT "sdmc:/switch/wind-waker-recomp"
 
-// With Aurora the game owns the screen (switch/aurora/switch_present.cpp
-// draws into the default window's framebuffer), so the text console is off.
+// With Aurora the game owns the screen (Dawn presents to the default window),
+// so the text console is off.
 #if defined(BLUEWAKE_SWITCH_AURORA)
 #define SHOW_CONSOLE 0
 #define RENDERER "aurora"
