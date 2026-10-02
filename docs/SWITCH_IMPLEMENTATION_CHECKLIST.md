@@ -20,12 +20,14 @@
 - [x] Verified the current NRO has `NRO0` at header offset `0x10`, passes local shell/whitespace checks, and remains ignored by Git.
 - [x] Made the Dawn patch set apply to a clean checkout. `abseil-switch-timezone-newlib.patch` and `dawn-switch-allow-native-fence-sync.patch` had been written against intermediate local edits; both are now regenerated against the sources they are applied to, and the unused `abseil-switch-timezone.patch` is removed.
 - [x] Rebuilt all three probes from a clean checkout with Docker on Apple Silicon. The bootstrap NRO reproduces the recorded `39cc9639…` hash. The GLES NRO builds deterministically as `4ca067b1…`, not the recorded `23ccf3cb…`, so that recorded hash predates the committed `gles_probe.c`.
+- [x] Ran the `c153fe36…` Dawn NRO on hardware. Dawn found the OpenGLES adapter (`NV120`, ES 3.2) and created the device with robustness disabled and no EGL sync. Three probe bugs then stopped it: the test WGSL called `textureSample` in non-uniform control flow, the readback used a timed `WaitAny` without the `TimedWaitAny` instance feature, and the instance/adapter wrappers were `Acquire`d over references the `dawn::native` objects still owned, so they were released twice and the app closed before logging a result. All three are fixed in the `79c01d0c…` build, which still needs a physical rerun.
+- [x] The latest GLES run reached 60.4 FPS with framebuffer copy passing, but lasted 9.8 seconds; the 10-minute soak is still outstanding.
 
 ## Current Dawn diagnostic artifact
 
 - Path: [BlueWakeDawnOffscreenProbe.nro](../build/switch-dawn-probe/BlueWakeDawnOffscreenProbe.nro)
 - Size: 11,489,280 bytes
-- SHA-256: `c153fe36211627ea933cfa2b18698448c20db826a14c5665fa88d6cb9e6ec884` (clean Docker rebuild; the earlier `355a1c98…` build came from a build tree with unrecorded patch state)
+- SHA-256: `79c01d0c48cc4178d5910d716df785669afbfadfbc50454124bb25393b0d48fa` (probe fixes below; built with Docker)
 - Build command: `bash scripts/switch/build_dawn_probe.sh`
 - The build scripts use Podman, or Docker when Podman is absent (`SWITCH_CONTAINER_ENGINE` forces one). The pinned devkitPro image has a native `linux/arm64` variant.
 - Console log: `sdmc:/switch/wind-waker-recomp/dawn-probe.log`

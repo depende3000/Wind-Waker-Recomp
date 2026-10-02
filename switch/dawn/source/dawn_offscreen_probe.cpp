@@ -64,8 +64,10 @@ fn vs_main(
 
 @fragment
 fn fs_main(input : VertexOut) -> @location(0) vec4f {
+    // WGSL requires textureSample in uniform control flow, so sample first.
+    let sampled = textureSample(testTexture, testSampler, input.uv);
     if (input.mode == 0u) {
-        return textureSample(testTexture, testSampler, input.uv);
+        return sampled;
     }
     return input.color;
 }
@@ -345,7 +347,9 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
         log_message("[dawn] instance creation failed\n");
         return false;
     }
-    wgpu::Instance instance = wgpu::Instance::Acquire(native_instance.Get());
+    // native_instance keeps its own reference; take a second one rather than
+    // Acquire, which would release the same reference twice at scope exit.
+    wgpu::Instance instance(native_instance.Get());
 
     dawn::native::opengl::RequestAdapterOptionsGetGLProc get_gl_proc;
     get_gl_proc.getProc = reinterpret_cast<dawn::native::opengl::EGLGetProcProc>(
@@ -364,7 +368,7 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
         return false;
     }
 
-    wgpu::Adapter adapter = wgpu::Adapter::Acquire(adapters.front().Get());
+    wgpu::Adapter adapter(adapters.front().Get());
     wgpu::AdapterInfo adapter_info = {};
     const wgpu::Status info_status = adapter.GetInfo(&adapter_info);
     log_message("[dawn] GLES adapter count=%zu info_status=%u backend=%u type=%u\n",
@@ -549,7 +553,15 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
             if (!map_succeeded)
                 log_wgpu_message("[dawn] readback map failed: ", message);
         });
-    const wgpu::WaitStatus wait_status = instance.WaitAny(map_future, UINT64_MAX);
+    // Timed waits need the TimedWaitAny instance feature, which the GL backend
+    // without EGL sync cannot back, so poll with a zero timeout instead.
+    wgpu::WaitStatus wait_status = wgpu::WaitStatus::TimedOut;
+    for (int attempt = 0; attempt < 5000 && wait_status == wgpu::WaitStatus::TimedOut;
+         ++attempt) {
+        wait_status = instance.WaitAny(map_future, 0);
+        if (wait_status == wgpu::WaitStatus::TimedOut)
+            svcSleepThread(1'000'000);
+    }
     if (wait_status != wgpu::WaitStatus::Success || !map_succeeded) {
         log_message("[dawn] GPU readback wait failed (status=%u)\n",
                     static_cast<unsigned>(wait_status));
