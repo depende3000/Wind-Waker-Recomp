@@ -97,6 +97,14 @@ set(GXRUNTIME_ENABLE_AURORA_RECOMP ON CACHE BOOL "" FORCE)
 # creates. sqlite (Aurora's pipeline cache) without WAL or memory-mapped
 # files, which need mmap.
 function(aurora_switch_configure_targets)
+  # Offscreen rendering and presentation through the libnx framebuffer
+  # (switch_present.cpp, used by the gpu.cpp and aurora.cpp patches), and
+  # Mesa's EGL/GLES, which Dawn reaches through eglGetProcAddress.
+  target_sources(aurora_core PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/switch_present.cpp")
+  target_include_directories(aurora_core PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}"
+                             "${DEVKITPRO_ROOT}/portlibs/switch/include")
+  target_link_directories(aurora_core PUBLIC "${DEVKITPRO_ROOT}/portlibs/switch/lib")
+  target_link_libraries(aurora_core PUBLIC EGL GLESv2 glapi drm_nouveau nx)
   # ImGui's default "open in shell" uses fork/exec/waitpid.
   if(TARGET imgui)
     target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)

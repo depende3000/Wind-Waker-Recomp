@@ -13,6 +13,16 @@
 
 #define DATA_ROOT "sdmc:/switch/wind-waker-recomp"
 
+// With Aurora the game owns the screen (switch/aurora/switch_present.cpp
+// draws into the default window's framebuffer), so the text console is off.
+#if defined(BLUEWAKE_SWITCH_AURORA)
+#define SHOW_CONSOLE 0
+#define RENDERER "aurora"
+#else
+#define SHOW_CONSOLE 1
+#define RENDERER "headless"
+#endif
+
 int bluewake_host_main(int argc, char** argv);
 
 static FILE* g_log;
@@ -69,22 +79,27 @@ int main(int argc, char** argv) {
     g_log = fopen(DATA_ROOT "/host.log", "w");
     const bool usb = usb_log_start();
     mutexInit(&g_output_lock);
-    consoleInit(NULL);
-    g_console = devoptab_list[STD_OUT];
+    if (SHOW_CONSOLE) {
+        consoleInit(NULL);
+        g_console = devoptab_list[STD_OUT];
+    }
     devoptab_list[STD_OUT] = &g_tee;
     devoptab_list[STD_ERR] = &g_tee;
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    fprintf(stderr, "Wind Waker Recomp for Switch - headless build: no picture, sound or\n"
-                    "controls yet. The game runs for about a minute and logs its progress.\n\n");
+    if (SHOW_CONSOLE)
+        fprintf(stderr, "Wind Waker Recomp for Switch - headless build: no picture, sound or\n"
+                        "controls yet. The game runs for about a minute and logs its progress.\n\n");
     fprintf(stderr, "[switch] host starting; usb live log=%s, log=%s/host.log\n",
             usb ? "started" : "unavailable", DATA_ROOT);
 
     setenv("BLUEWAKE_ROOT", DATA_ROOT, 0);
-    setenv("BLUEWAKE_RENDERER", "headless", 0);
+    setenv("BLUEWAKE_RENDERER", RENDERER, 0);
+#if !defined(BLUEWAKE_SWITCH_AURORA)
     setenv("BLUEWAKE_LIVE_PAD", "0", 0);
     // A bounded first run: about one minute of guest time at 60 retraces/s.
     setenv("BLUEWAKE_MAX_RETRACES", "3600", 0);
+#endif
     default_path("BLUEWAKE_DOL", "game/main.dol");
     default_path("BLUEWAKE_RELS_DIR", "game/rels");
     default_path("BLUEWAKE_DISC", "GZLE01.iso");
@@ -118,15 +133,19 @@ int main(int argc, char** argv) {
         padUpdate(&pad);
         if ((padGetButtonsDown(&pad) & HidNpadButton_Plus) != 0)
             break;
-        mutexLock(&g_output_lock);
-        present_console(true);
-        mutexUnlock(&g_output_lock);
+        if (SHOW_CONSOLE) {
+            mutexLock(&g_output_lock);
+            present_console(true);
+            mutexUnlock(&g_output_lock);
+        }
         svcSleepThread(16000000ULL);
     }
     usb_log_stop(2000);
-    devoptab_list[STD_OUT] = g_console;
-    devoptab_list[STD_ERR] = g_console;
-    consoleExit(NULL);
+    if (SHOW_CONSOLE) {
+        devoptab_list[STD_OUT] = g_console;
+        devoptab_list[STD_ERR] = g_console;
+        consoleExit(NULL);
+    }
     if (g_log != NULL)
         fclose(g_log);
     return status;

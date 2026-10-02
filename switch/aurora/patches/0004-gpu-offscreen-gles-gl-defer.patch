@@ -1,0 +1,132 @@
+--- a/graphics/aurora/lib/webgpu/gpu.cpp
++++ b/graphics/aurora/lib/webgpu/gpu.cpp
+@@ -27,6 +27,14 @@
+ #include <dawn/native/DawnNative.h>
+ #endif
+ 
++#if defined(__SWITCH__)
++// No Dawn surface for libnx's NWindow: Dawn's OpenGL ES backend on Mesa's EGL,
++// rendering offscreen; switch_present.hpp shows the frames.
++#include <EGL/egl.h>
++#include <dawn/native/OpenGLBackend.h>
++#include "switch_present.hpp"
++#endif
++
+ namespace aurora::gx {
+ void clear_copy_texture_cache() noexcept;
+ } // namespace aurora::gx
+@@ -736,6 +744,9 @@
+ }
+ 
+ static bool create_surface() {
++#if defined(__SWITCH__)
++  return true;
++#endif
+   SDL_Window* window = window::get_sdl_window();
+   if (window == nullptr) {
+     Log.error("Failed to create surface: no window");
+@@ -785,7 +796,12 @@
+       return false;
+     }
+   }
++#if defined(__SWITCH__)
++  (void)auroraBackend;
++  const wgpu::BackendType backend = wgpu::BackendType::OpenGLES;
++#else
+   const wgpu::BackendType backend = to_wgpu_backend(auroraBackend);
++#endif
+   Log.info("Attempting to initialize {}", magic_enum::enum_name(backend));
+ #if 0
+   // D3D12's debug layer is very slow
+@@ -796,7 +812,17 @@
+     return false;
+   }
+   {
++#if defined(__SWITCH__)
++    // Dawn finds Mesa's EGL through eglGetProcAddress (its dlopen path is
++    // patched out for Horizon) and uses the default display, surfaceless.
++    dawn::native::opengl::RequestAdapterOptionsGetGLProc glProc;
++    glProc.getProc = reinterpret_cast<dawn::native::opengl::EGLGetProcProc>(eglGetProcAddress);
++    glProc.display = EGL_NO_DISPLAY;
++#endif
+     const wgpu::RequestAdapterOptions options{
++#if defined(__SWITCH__)
++        .nextInChain = &glProc,
++#endif
+         .featureLevel = wgpu::FeatureLevel::Compatibility,
+         .powerPreference = wgpu::PowerPreference::HighPerformance,
+         .backendType = backend,
+@@ -962,7 +988,14 @@
+         "allow_unsafe_apis",
+         "disable_symbol_renaming",
+         "enable_immediate_error_handling",
++#if defined(__SWITCH__)
++        // Mesa on the Switch draws nothing through the shared context
++        // gl_allow_context_on_multi_threads creates; gl_defer runs all GL work
++        // at Submit with one context, from any thread (tested on the console).
++        "gl_defer",
++#else
+         "gl_allow_context_on_multi_threads",
++#endif
+     };
+     constexpr std::array disableToggles{
+         "timestamp_quantization",
+@@ -1021,6 +1054,11 @@
+   }
+   g_queue = g_device.GetQueue();
+ 
++#if defined(__SWITCH__)
++  switch_present::initialize(g_instance, g_device);
++  const auto surfaceFormat = switch_present::kFormat;
++  const auto presentMode = wgpu::PresentMode::Fifo;
++#else
+   const wgpu::Status status = g_surface.GetCapabilities(g_adapter, &g_surfaceCapabilities);
+   if (status != wgpu::Status::Success) {
+     Log.error("Failed to get surface capabilities: {}", magic_enum::enum_name(status));
+@@ -1036,6 +1074,7 @@
+   }
+   auto surfaceFormat = best_surface_format();
+   auto presentMode = best_present_mode(g_config.vsync);
++#endif
+   Log.info("Using surface format {}, present mode {}", magic_enum::enum_name(surfaceFormat),
+            magic_enum::enum_name(presentMode));
+   const auto size = window::get_window_size();
+@@ -1063,6 +1102,9 @@
+ void shutdown() {
+   g_initialized = false;
+   gfx::gpu_synchronize();
++#if defined(__SWITCH__)
++  switch_present::shutdown();
++#endif
+   gpu_prof::shutdown();
+   g_CopyBindGroupLayout = {};
+   g_CopyPipeline = {};
+@@ -1093,7 +1135,12 @@
+ 
+ static void resize_swapchain_internal(uint32_t width, uint32_t height, uint32_t nativeWidth, uint32_t nativeHeight,
+                                       bool force) {
+-  if (!g_surface || !g_device || width == 0 || height == 0 || nativeHeight == 0 || nativeWidth == 0) {
++#if defined(__SWITCH__)
++  const bool haveTarget = true;
++#else
++  const bool haveTarget = static_cast<bool>(g_surface);
++#endif
++  if (!haveTarget || !g_device || width == 0 || height == 0 || nativeHeight == 0 || nativeWidth == 0) {
+     return;
+   }
+   const bool sizeChanged = g_graphicsConfig.surfaceConfiguration.width != nativeWidth ||
+@@ -1110,10 +1157,14 @@
+   g_graphicsConfig.surfaceConfiguration.height = nativeHeight;
+   auto surfaceConfiguration = g_graphicsConfig.surfaceConfiguration;
+   surfaceConfiguration.device = g_device;
++#if defined(__SWITCH__)
++  switch_present::resize(nativeWidth, nativeHeight);
++#else
+   {
+     window::SurfaceLock surfaceLock;
+     g_surface.Configure(&surfaceConfiguration);
+   }
++#endif
+   g_frameBuffer = create_render_texture(width, height, true);
+   g_frameBufferResolved = create_render_texture(width, height, false);
+   g_depthBuffer = create_depth_texture(width, height);
