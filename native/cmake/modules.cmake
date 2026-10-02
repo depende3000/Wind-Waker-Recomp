@@ -34,7 +34,8 @@ set(TWW_MODULES_READY
         actors-2
         actors-3
         actors-4
-        actors-5)
+        actors-5
+        actors-6)
 
 set(TWW_ACTOR_CHUNKS 6)
 
