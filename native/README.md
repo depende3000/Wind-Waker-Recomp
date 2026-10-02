@@ -33,7 +33,8 @@ cmake -S native -B build/native-mac -G Ninja
 ninja -C build/native-mac tww_scaffold_check       # toolchain + base headers sanity check
 ```
 
-Each module is an `OBJECT` library behind an option, off until it compiles:
+Each module is an `OBJECT` library behind an option, off until it compiles; the modules listed
+in `TWW_MODULES_READY` (`cmake/modules.cmake`) compile and default to on (currently `SSystem`):
 
 | Target | Option | Sources (`native/tww/src/...`) |
 | --- | --- | --- |
@@ -48,7 +49,7 @@ Each module is an `OBJECT` library behind an option, off until it compiles:
 | `actors-1` … `actors-6` | `TWW_MODULE_actors_N` | `d/actor`, sorted, in six equal chunks |
 
 ```sh
-cmake -S native -B build/native-mac -DTWW_MODULE_SSystem=ON    # or -DTWW_ALL_MODULES=ON
+cmake -S native -B build/native-mac -DTWW_MODULE_framework=ON  # or -DTWW_ALL_MODULES=ON
 ninja -C build/native-mac -k 0 SSystem                         # one module at a time
 ninja -C build/native-mac tww_deferred                         # deferred units and reasons
 ```

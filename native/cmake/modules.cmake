@@ -1,7 +1,8 @@
 # Game modules: one OBJECT library per module, built and fixed one at a time in phase 1.
 #
 # Each module is behind the option TWW_MODULE_<name> (with '-' as '_'), OFF until its sources
-# compile; turn it on with -DTWW_MODULE_<name>=ON or for everything with -DTWW_ALL_MODULES=ON.
+# compile (modules in TWW_MODULES_READY default to ON); turn one on with
+# -DTWW_MODULE_<name>=ON or everything with -DTWW_ALL_MODULES=ON.
 # Sources are taken from fixed directories of native/tww/src (sorted, so the actor split is
 # stable), minus the units listed in deferred.cmake.
 include_guard(GLOBAL)
@@ -18,6 +19,10 @@ set(TWW_MODULES
         m_Do
         d-core
         actors-1 actors-2 actors-3 actors-4 actors-5 actors-6)
+
+# Modules whose every unit compiles (or is deferred); their options default to ON.
+set(TWW_MODULES_READY
+        SSystem)
 
 set(TWW_ACTOR_CHUNKS 6)
 
@@ -69,7 +74,11 @@ get_property(_deferred GLOBAL PROPERTY TWW_DEFERRED_UNITS)
 set(_enabled)
 foreach (_m IN LISTS TWW_MODULES)
     string(REPLACE "-" "_" _opt "TWW_MODULE_${_m}")
-    option(${_opt} "Build the ${_m} game module" OFF)
+    if (_m IN_LIST TWW_MODULES_READY)
+        option(${_opt} "Build the ${_m} game module" ON)
+    else ()
+        option(${_opt} "Build the ${_m} game module" OFF)
+    endif ()
 
     set(_srcs ${TWW_SRC_${_m}})
     list(LENGTH _srcs _total)
