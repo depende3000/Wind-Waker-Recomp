@@ -103,7 +103,15 @@ int main(int argc, char** argv) {
     // sqlite takes a path not starting with '/' as relative.
     setenv("DOL_AURORA_CACHE_DIR", "/switch/wind-waker-recomp/cache", 0);
     mkdir(DATA_ROOT "/cache", 0777);
-#if !defined(BLUEWAKE_SWITCH_AURORA)
+#if defined(BLUEWAKE_SWITCH_AURORA)
+    // First-run settings for the Switch: the game's 4:3 picture letterboxed
+    // in the 16:9 screen, rendered at its own 480 lines, no in-between frames,
+    // and the frame rate shown. Each can be overridden in the environment.
+    setenv("DOL_AURORA_ASPECT_FIT", "1", 0);
+    setenv("DOL_AURORA_RENDER_SCALE", "1", 0);
+    setenv("DOL_AURORA_FRAME_INTERP", "0", 0);
+    setenv("DOL_AURORA_SHOW_FPS", "1", 0);
+#else
     setenv("BLUEWAKE_LIVE_PAD", "0", 0);
     // A bounded first run: about one minute of guest time at 60 retraces/s.
     setenv("BLUEWAKE_MAX_RETRACES", "3600", 0);
