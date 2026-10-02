@@ -144,15 +144,25 @@ if(BLUEWAKE_SWITCH_AURORA)
   target_link_options(aurora_smoke PRIVATE "LINKER:--wrap=pthread_create")
   target_link_libraries(aurora_smoke PRIVATE
     aurora::core aurora::gx aurora::pad aurora::si aurora::os aurora::vi SDL3::SDL3-static nx)
+  nx_generate_nacp(aurora_smoke.nacp
+    NAME "Wind Waker Recomp - Aurora test" AUTHOR "Wind Waker Recomp contributors" VERSION "0.1.0")
   nx_create_nro(BlueWakeAuroraSmoke
     TARGET aurora_smoke
     OUTPUT "${CMAKE_BINARY_DIR}/BlueWakeAuroraSmoke.nro"
-    NOICON
-    NONACP)
+    NACP aurora_smoke.nacp
+    NOICON)
 endif()
 
+# The name, author and version the Homebrew Menu shows.
+if(BLUEWAKE_SWITCH_AURORA)
+  set(BLUEWAKE_SWITCH_TITLE "Wind Waker Recomp")
+else()
+  set(BLUEWAKE_SWITCH_TITLE "Wind Waker Recomp (headless)")
+endif()
+nx_generate_nacp(bluewake_switch.nacp
+  NAME "${BLUEWAKE_SWITCH_TITLE}" AUTHOR "Wind Waker Recomp contributors" VERSION "0.1.0")
 nx_create_nro(BlueWakeSwitch
   TARGET bluewake_switch_host
   OUTPUT "${CMAKE_BINARY_DIR}/BlueWakeSwitch.nro"
-  NOICON
-  NONACP)
+  NACP bluewake_switch.nacp
+  NOICON)

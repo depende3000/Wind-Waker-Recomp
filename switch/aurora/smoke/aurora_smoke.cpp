@@ -2,7 +2,8 @@
 // Starts Aurora (the SDL 3 shim's window, Dawn's OpenGL ES device with
 // gl_defer), presents frames to libnx's window through a Dawn surface with an
 // ImGui window showing the GameCube pad Aurora reads from the controller, and plays
-// a tone through the shim's audout stream while A is held. + (GameCube Start)
+// a tone through the shim's audout stream while A is held, and rumbles while B
+// is held. + (GameCube Start)
 // exits. Log: sdmc:/switch/wind-waker-recomp/aurora-smoke.log and the live USB
 // log.
 #include <aurora/aurora.h>
@@ -132,6 +133,13 @@ int main(int argc, char** argv) {
     if (audio != nullptr && (pad.button & PAD_BUTTON_A) != 0 && SDL_GetAudioStreamQueued(audio) < 32000) {
       push_tone(audio, phase);
     }
+    // B rumbles, through the GameCube PAD API the game uses.
+    static bool rumbling = false;
+    const bool wantRumble = (pad.button & PAD_BUTTON_B) != 0;
+    if (wantRumble != rumbling) {
+      PADControlMotor(0, wantRumble ? PAD_MOTOR_RUMBLE : PAD_MOTOR_STOP);
+      rumbling = wantRumble;
+    }
     updateUs += since(updateStart);
     ++frames;
     const uint64_t beginStart = armGetSystemTick();
@@ -149,7 +157,7 @@ int main(int argc, char** argv) {
     ImGui::Text("GameCube pad 0: err=%d buttons=0x%04X", pad.err, pad.button);
     ImGui::Text("Main stick %4d %4d   C stick %4d %4d", pad.stickX, pad.stickY, pad.substickX, pad.substickY);
     ImGui::Text("Triggers L %3u R %3u", pad.triggerLeft, pad.triggerRight);
-    ImGui::Text("Hold A for a 440 Hz tone. + exits.");
+    ImGui::Text("Hold A for a 440 Hz tone, B to rumble. + exits.");
     ImGui::End();
     const uint64_t endStart = armGetSystemTick();
     aurora_end_frame();
