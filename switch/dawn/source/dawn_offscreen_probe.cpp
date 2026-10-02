@@ -482,15 +482,16 @@ void run_on_worker(const std::function<void()>& work) {
     pthread_attr_destroy(&attributes);
 }
 
-// One scenario: a fresh device, optionally with Dawn's
-// gl_allow_context_on_multi_threads toggle, and the test scene drawn either on
-// the thread that created the device or on a worker (as Aurora does). Worker
-// scenarios also time Aurora-sized frames.
+// One scenario: a fresh device, optionally with one of Dawn's GL threading
+// toggles (gl_allow_context_on_multi_threads, or gl_defer, which defers all GL
+// work to Queue::Submit and binds the one context only while it runs), and the
+// test scene drawn either on the thread that created the device or on a worker
+// (as Aurora does). measure_frames also times Aurora-sized frames.
 bool render_with_dawn(std::vector<uint8_t>& pixels, const char* label,
-                      bool context_on_multi_threads, bool render_on_worker,
+                      const char* threading_toggle, bool render_on_worker,
                       bool measure_frames) {
-    log_message("[scenario] %s: toggle gl_allow_context_on_multi_threads=%s, draw on %s\n",
-                label, context_on_multi_threads ? "on" : "off",
+    log_message("[scenario] %s: toggle %s, draw on %s\n", label,
+                threading_toggle != nullptr ? threading_toggle : "none",
                 render_on_worker ? "worker thread" : "creating thread");
     // Initialize the shared default display first so the log captures the
     // platform extension set even if Dawn rejects adapter discovery.
@@ -552,8 +553,8 @@ bool render_with_dawn(std::vector<uint8_t>& pixels, const char* label,
     wgpu::DawnTogglesDescriptor device_toggles = {};
     std::array<const char*, 2> enabled_toggles = {};
     size_t toggle_count = 0;
-    if (context_on_multi_threads)
-        enabled_toggles[toggle_count++] = "gl_allow_context_on_multi_threads";
+    if (threading_toggle != nullptr)
+        enabled_toggles[toggle_count++] = threading_toggle;
     if (!egl_robustness_available)
         enabled_toggles[toggle_count++] = "disable_robustness";
     device_toggles.enabledToggleCount = toggle_count;
@@ -866,14 +867,17 @@ int main(int, char**) {
     std::vector<uint8_t> pixels;
     // The first scenario is the reference that is displayed. The others answer
     // whether Aurora's threading model works on this GL stack.
-    const bool success = render_with_dawn(pixels, "A", false, false, false);
+    const bool success = render_with_dawn(pixels, "A", nullptr, false, false);
     std::vector<uint8_t> scratch;
-    render_with_dawn(scratch, "B", false, true, false);
-    render_with_dawn(scratch, "C", true, true, false);
+    render_with_dawn(scratch, "B", nullptr, true, false);
+    render_with_dawn(scratch, "C", "gl_allow_context_on_multi_threads", true, false);
+    // Aurora's model unchanged, if gl_defer works here: device on this thread,
+    // GPU work from another.
+    render_with_dawn(scratch, "E", "gl_defer", true, true);
     // The model Aurora would need here: one GPU thread that creates the device
     // and does all of the GPU work, with no multi-thread toggle.
     log_message("[scenario] D runs entirely on a worker thread (device created there)\n");
-    run_on_worker([&] { render_with_dawn(scratch, "D", false, false, true); });
+    run_on_worker([&] { render_with_dawn(scratch, "D", nullptr, false, true); });
     log_message("[probe] result=%s\n", success ? "PASS" : "FAIL");
     const bool display_ok = present_readback(pixels, success);
     log_message("[probe] display=%s; shutting down\n",

@@ -1,0 +1,12 @@
+--- a/graphics/aurora/lib/gfx/gxcore_draw.cpp
++++ b/graphics/aurora/lib/gfx/gxcore_draw.cpp
+@@ -519,8 +519,8 @@
+     });
+   }
+   const wgpu::VertexBufferLayout vertexLayout{
+-      .arrayStride = gxc::kVertexStrideBytes,
+       .stepMode = wgpu::VertexStepMode::Vertex,
++      .arrayStride = gxc::kVertexStrideBytes,
+       .attributeCount = attributes.size(),
+       .attributes = attributes.data(),
+   };

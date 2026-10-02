@@ -1,0 +1,41 @@
+--- a/backends/aurora/aurora_graphics.cpp
++++ b/backends/aurora/aurora_graphics.cpp
+@@ -22,7 +22,9 @@
+ #include <thread>
+ #include <vector>
+ #if !defined(_WIN32)
++#if !defined(__SWITCH__)
+ #include <execinfo.h>
++#endif
+ #include <pthread.h>
+ #include <signal.h>
+ #include <unistd.h>
+@@ -500,6 +502,7 @@
+ #if !defined(_WIN32)
+ std::atomic<pthread_t> g_fifo_pthread{};
+ 
++#if !defined(__SWITCH__)
+ void stall_stack_handler(int) {
+     void* frames[48];
+     const int n = backtrace(frames, 48);
+@@ -509,6 +512,7 @@
+     static const char kFooter[] = "[gx-stall-stack] end\n";
+     (void)!write(2, kFooter, sizeof kFooter - 1);
+ }
++#endif
+ 
+ #endif
+ 
+@@ -518,9 +522,9 @@
+         .count();
+ }
+ 
+-#if defined(_WIN32)
+-// Windows has no backtrace() or thread signals: DOL_GX_STALL_STACKS is a
+-// Mac and Linux diagnostic.
++#if defined(_WIN32) || defined(__SWITCH__)
++// Windows and Horizon have no backtrace() or thread signals:
++// DOL_GX_STALL_STACKS is a Mac and Linux diagnostic.
+ void start_stall_watchdog() {}
+ #else
+ void start_stall_watchdog() {

@@ -31,6 +31,8 @@
   - **Threads:** Dawn's GL context works only on the thread that created the device. Drawing from another thread loses the device, and `gl_allow_context_on_multi_threads` is broken on this Mesa: with it, nothing is drawn even on one thread. A worker thread that creates the device and does all of the GPU work passes. Aurora on Switch therefore needs a single GPU thread without that toggle.
   - **Stacks:** libnx gives `std::thread` 128 KiB, which Tint's WGSL parser overflows (Atmosphère crash report 2168-0002 in `tint::resolver`). Threads that create shader modules need several MiB; the probe uses 4 MiB.
   - **Cost:** 300 frames at 960x720 with readback, `glFinish` per submission: 9.07 ms average, 10.51 ms slowest. About 24 ms of a 33 ms frame remain for GX work.
+- [x] Dawn's `gl_defer` toggle works on the console (scenario E): with all GL work deferred to `Queue::Submit` and one context bound only while it runs, a device created on one thread draws from another, at 9.01 ms per 960x720 frame with readback. Aurora can keep its own threads; it does not need a single GPU thread.
+- [x] Aurora builds and links for the Switch (`BLUEWAKE_SWITCH_AURORA`, `switch/aurora`), with the host, GXRuntime, Dawn and the donor DSP in one NRO, so far against a synthetic composite. SDL 3 comes from a small libnx shim of the 134 functions Aurora calls (`switch/aurora/sdl3_shim`): gamepad over HID, events, one fixed window, SD-card I/O, and absent audio, haptics, sensors, keyboard and mouse. Three source patches (`switch/aurora/patches`): a designator order GCC rejects, the stall-stack watchdog off as on Windows, and ImGui without its SDL backends. Every thread gets a 4 MiB stack through a `pthread_create` wrapper.
 
 ## Current Dawn diagnostic artifact
 

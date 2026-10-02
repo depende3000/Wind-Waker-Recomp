@@ -1,7 +1,9 @@
-# Switch NRO of the BlueWake host, headless milestone: the shared host and
-# GXRuntime without Aurora, the donor DSP, and the statically linked game
-# composite (cmake/composite with COMPOSITE_STATIC). Configure with the
-# devkitPro toolchain; scripts/switch/build_host.sh does it in the container.
+# Switch NRO of the BlueWake host: the shared host, GXRuntime, the donor DSP,
+# and the statically linked game composite (cmake/composite with
+# COMPOSITE_STATIC). By default it is the headless milestone (GXRuntime without
+# Aurora); BLUEWAKE_SWITCH_AURORA adds the Aurora renderer (switch/aurora).
+# Configure with the devkitPro toolchain; scripts/switch/build_host.sh does it
+# in the container.
 cmake_minimum_required(VERSION 3.20)
 project(BlueWakeSwitchHost LANGUAGES C CXX)
 
@@ -19,27 +21,43 @@ if(NOT EXISTS "${BLUEWAKE_COMPOSITE_OBJECT}")
   message(FATAL_ERROR "Set BLUEWAKE_COMPOSITE_OBJECT to the static composite object")
 endif()
 
+option(BLUEWAKE_SWITCH_AURORA "Build with the Aurora renderer instead of headless only" OFF)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
-
-# GXRuntime alone: the headless renderer, no Aurora, no tests.
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(GXRUNTIME_ENABLE_AURORA OFF CACHE BOOL "" FORCE)
-set(GXRUNTIME_ENABLE_AURORA_RECOMP OFF CACHE BOOL "" FORCE)
+
+if(BLUEWAKE_SWITCH_AURORA)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../aurora/aurora.cmake")
+  set(GXRUNTIME_DIR "${GXRUNTIME_SWITCH_DIR}")
+else()
+  # GXRuntime alone: the headless renderer.
+  set(GXRUNTIME_ENABLE_AURORA OFF CACHE BOOL "" FORCE)
+  set(GXRUNTIME_ENABLE_AURORA_RECOMP OFF CACHE BOOL "" FORCE)
+endif()
 add_subdirectory("${GXRUNTIME_DIR}" gxruntime EXCLUDE_FROM_ALL)
+if(BLUEWAKE_SWITCH_AURORA)
+  aurora_switch_configure_targets()
+endif()
 
 set(PORTLIBS_INCLUDE "${DEVKITPRO}/portlibs/switch/include")
 set(SWITCH_COMPAT "${CMAKE_CURRENT_SOURCE_DIR}/compat")
 
 # The donor DSP (Dolphin's DSP LLE from RecompCore), as the iOS build compiles
 # it: its own sources plus the small Common shim instead of libcommon.
-add_library(fmt STATIC
-  "${RECOMPCORE_DIR}/Externals/fmt/fmt/src/format.cc"
-  "${RECOMPCORE_DIR}/Externals/fmt/fmt/src/os.cc")
-target_include_directories(fmt PUBLIC "${RECOMPCORE_DIR}/Externals/fmt/fmt/include")
-target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
-add_library(xxhash STATIC "${RECOMPCORE_DIR}/Externals/xxhash/xxHash/xxhash.c")
-target_include_directories(xxhash PUBLIC "${RECOMPCORE_DIR}/Externals/xxhash/xxHash")
+# With Aurora these come from its extern/ (as on iOS); one fmt per binary.
+if(NOT TARGET fmt::fmt)
+  add_library(fmt STATIC
+    "${RECOMPCORE_DIR}/Externals/fmt/fmt/src/format.cc"
+    "${RECOMPCORE_DIR}/Externals/fmt/fmt/src/os.cc")
+  target_include_directories(fmt PUBLIC "${RECOMPCORE_DIR}/Externals/fmt/fmt/include")
+  target_compile_definitions(fmt PUBLIC FMT_EXCEPTIONS=0)
+  add_library(fmt::fmt ALIAS fmt)
+endif()
+if(NOT TARGET xxhash)
+  add_library(xxhash STATIC "${RECOMPCORE_DIR}/Externals/xxhash/xxHash/xxhash.c")
+  target_include_directories(xxhash PUBLIC "${RECOMPCORE_DIR}/Externals/xxhash/xxHash")
+endif()
 
 set(DSP "${RECOMPCORE_DIR}/Source/Core/Core/DSP")
 set(DSPHLE "${RECOMPCORE_DIR}/Source/Core/Core/HW/DSPHLE")
@@ -66,7 +84,7 @@ target_include_directories(bluewake_dsp_donor PRIVATE "${SWITCH_COMPAT}" "${PORT
 target_compile_definitions(bluewake_dsp_donor PUBLIC
   _ARCH_64=1 _M_ARM_64=1 _DEFAULT_SOURCE __STDC_CONSTANT_MACROS __STDC_LIMIT_MACROS)
 target_compile_options(bluewake_dsp_donor PRIVATE -fno-strict-aliasing -w)
-target_link_libraries(bluewake_dsp_donor PUBLIC fmt xxhash)
+target_link_libraries(bluewake_dsp_donor PUBLIC fmt::fmt xxhash)
 
 add_library(bluewake_dsp_adapter STATIC
   ${HOST_SRC}/dsp_adapter.cpp ${HOST_SRC}/dsp_adapter_c.cpp
@@ -89,6 +107,8 @@ add_executable(bluewake_switch_host
   ${HOST_SRC}/save_state.c
   source/headless_stubs.c
   source/switch_main.c
+  source/thread_stack.c
+  $<$<NOT:$<BOOL:${BLUEWAKE_SWITCH_AURORA}>>:${CMAKE_CURRENT_SOURCE_DIR}/source/aurora_stubs.c>
   ${CMAKE_CURRENT_SOURCE_DIR}/../source/common/usb_log.c)
 set_source_files_properties(${HOST_SRC}/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=bluewake_host_main")
@@ -105,8 +125,14 @@ target_compile_definitions(bluewake_switch_host PRIVATE
 target_compile_options(bluewake_switch_host PRIVATE
   "$<$<COMPILE_LANGUAGE:C>:SHELL:-include ${SWITCH_COMPAT}/switch_compat.h>" -g)
 target_link_directories(bluewake_switch_host PRIVATE "${DEVKITPRO}/portlibs/switch/lib")
+# Every thread gets a stack Dawn's shader compiler fits in (source/thread_stack.c).
+target_link_options(bluewake_switch_host PRIVATE "LINKER:--wrap=pthread_create")
 target_link_libraries(bluewake_switch_host PRIVATE
   "${BLUEWAKE_COMPOSITE_OBJECT}" bluewake_dsp_adapter gxruntime z nx m stdc++)
+if(BLUEWAKE_SWITCH_AURORA)
+  target_compile_definitions(bluewake_switch_host PRIVATE BLUEWAKE_SWITCH_AURORA=1)
+  target_link_libraries(bluewake_switch_host PRIVATE GXRuntime::aurora)
+endif()
 
 nx_create_nro(BlueWakeSwitch
   TARGET bluewake_switch_host
