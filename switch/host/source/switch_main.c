@@ -11,6 +11,10 @@
 
 #include "usb_log.h"
 
+#if defined(BLUEWAKE_SWITCH_AURORA)
+#include <EGL/egl.h>
+#endif
+
 #define DATA_ROOT "sdmc:/switch/wind-waker-recomp"
 
 // With Aurora the game owns the screen (switch/aurora/switch_present.cpp
@@ -140,6 +144,13 @@ int main(int argc, char** argv) {
         }
         svcSleepThread(16000000ULL);
     }
+#if defined(BLUEWAKE_SWITCH_AURORA)
+    // Mesa's EGL display outlives Dawn: without terminating it, the Homebrew Menu
+    // that hbloader loads next into this process crashed on every exit
+    // (nx-hbmenu + 0xf6b34, Atmosphère 2168-0002).
+    eglTerminate(eglGetDisplay(EGL_DEFAULT_DISPLAY));
+    eglReleaseThread();
+#endif
     usb_log_stop(2000);
     if (SHOW_CONSOLE) {
         devoptab_list[STD_OUT] = g_console;

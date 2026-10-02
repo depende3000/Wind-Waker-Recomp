@@ -132,6 +132,23 @@ target_link_libraries(bluewake_switch_host PRIVATE
 if(BLUEWAKE_SWITCH_AURORA)
   target_compile_definitions(bluewake_switch_host PRIVATE BLUEWAKE_SWITCH_AURORA=1)
   target_link_libraries(bluewake_switch_host PRIVATE GXRuntime::aurora)
+
+  # Aurora without the game: window, device, present, ImGui, PAD and audio
+  # on the console (switch/aurora/smoke).
+  add_executable(aurora_smoke
+    ${CMAKE_CURRENT_SOURCE_DIR}/../aurora/smoke/aurora_smoke.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../source/common/usb_log.c
+    source/thread_stack.c)
+  target_include_directories(aurora_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../source/common"
+                             "${PORTLIBS_INCLUDE}")
+  target_link_options(aurora_smoke PRIVATE "LINKER:--wrap=pthread_create")
+  target_link_libraries(aurora_smoke PRIVATE
+    aurora::core aurora::gx aurora::pad aurora::si aurora::os aurora::vi SDL3::SDL3-static nx)
+  nx_create_nro(BlueWakeAuroraSmoke
+    TARGET aurora_smoke
+    OUTPUT "${CMAKE_BINARY_DIR}/BlueWakeAuroraSmoke.nro"
+    NOICON
+    NONACP)
 endif()
 
 nx_create_nro(BlueWakeSwitch

@@ -880,6 +880,11 @@ int main(int, char**) {
     run_on_worker([&] { render_with_dawn(scratch, "D", nullptr, false, true); });
     log_message("[probe] result=%s\n", success ? "PASS" : "FAIL");
     const bool display_ok = present_readback(pixels, success);
+    // Mesa's EGL display outlives Dawn: without terminating it, the Homebrew Menu
+    // that hbloader loads next into this process crashed on every exit
+    // (nx-hbmenu + 0xf6b34, Atmosphère 2168-0002).
+    eglTerminate(eglGetDisplay(EGL_DEFAULT_DISPLAY));
+    eglReleaseThread();
     log_message("[probe] display=%s; shutting down\n",
                 display_ok ? "presented" : "failed");
     if (g_log != nullptr) {
