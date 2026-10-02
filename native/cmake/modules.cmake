@@ -29,7 +29,8 @@ set(TWW_MODULES_READY
         JSystem-studio
         framework
         m_Do
-        d-core)
+        d-core
+        actors-1)
 
 set(TWW_ACTOR_CHUNKS 6)
 
