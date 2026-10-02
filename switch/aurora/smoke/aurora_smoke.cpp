@@ -12,6 +12,11 @@
 #include <imgui.h>
 #include <SDL3/SDL_audio.h>
 #include <EGL/egl.h>
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
+#include <sqlite3.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cmath>
@@ -63,6 +68,64 @@ void aurora_log(AuroraLogLevel level, const char* module, const char* message, u
            static_cast<int>(length), message);
 }
 
+// Why Aurora's sqlite caches fail on the SD card: the raw file calls sqlite's
+// Unix VFS makes, then sqlite itself, each step logged.
+void diagnose_sqlite() {
+  const char* raw = "/switch/wind-waker-recomp/io-test.bin";
+  unlink(raw);
+  const int fd = open(raw, O_RDWR | O_CREAT, 0644);
+  log_line("[io] open rw|creat: fd=%d errno=%d\n", fd, fd < 0 ? errno : 0);
+  if (fd >= 0) {
+    char page[4096];
+    for (size_t i = 0; i < sizeof page; ++i) {
+      page[i] = static_cast<char>(i * 7);
+    }
+    log_line("[io] lseek 4096: %lld\n", static_cast<long long>(lseek(fd, 4096, SEEK_SET)));
+    log_line("[io] write 4096 at 4096: %zd errno=%d\n", write(fd, page, sizeof page), errno);
+    log_line("[io] lseek 0: %lld\n", static_cast<long long>(lseek(fd, 0, SEEK_SET)));
+    log_line("[io] write 4096 at 0: %zd\n", write(fd, page, sizeof page));
+    struct stat info{};
+    fstat(fd, &info);
+    log_line("[io] fstat size: %lld\n", static_cast<long long>(info.st_size));
+    char back[4096] = {};
+    lseek(fd, 4096, SEEK_SET);
+    const ssize_t got = read(fd, back, sizeof back);
+    log_line("[io] read 4096 at 4096: %zd, matches=%d\n", got, std::memcmp(page, back, sizeof back) == 0);
+    log_line("[io] ftruncate 2048: %d errno=%d\n", ftruncate(fd, 2048), errno);
+    fstat(fd, &info);
+    log_line("[io] fstat size after truncate: %lld\n", static_cast<long long>(info.st_size));
+    log_line("[io] fsync: %d errno=%d\n", fsync(fd), errno);
+    close(fd);
+  }
+  unlink(raw);
+
+  const char* path = "/switch/wind-waker-recomp/sqlite-test.db";
+  unlink(path);
+  sqlite3* db = nullptr;
+  int rc = sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
+  log_line("[sqlite] open rc=%d (%s) vfs=%s\n", rc, db != nullptr ? sqlite3_errmsg(db) : "-",
+           sqlite3_vfs_find(nullptr) != nullptr ? sqlite3_vfs_find(nullptr)->zName : "?");
+  const char* steps[] = {
+      "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+      "BEGIN;",
+      "CREATE TABLE t(k INTEGER PRIMARY KEY, v BLOB);",
+      "INSERT INTO t(v) VALUES (randomblob(3000));",
+      "COMMIT;",
+      "SELECT count(*) FROM t;",
+  };
+  for (const char* sql : steps) {
+    char* error = nullptr;
+    rc = sqlite3_exec(db, sql, nullptr, nullptr, &error);
+    log_line("[sqlite] %s -> rc=%d %s (errno %d)\n", sql, rc, error != nullptr ? error : "ok",
+             sqlite3_system_errno(db));
+    sqlite3_free(error);
+  }
+  sqlite3_close(db);
+  struct stat info{};
+  stat(path, &info);
+  log_line("[sqlite] file size after: %lld\n", static_cast<long long>(info.st_size));
+}
+
 // One 440 Hz tone chunk at 32 kHz stereo, pushed while A is held.
 void push_tone(SDL_AudioStream* stream, double& phase) {
   constexpr int kRate = 32000;
@@ -83,6 +146,7 @@ int main(int argc, char** argv) {
   devoptab_list[STD_ERR] = &g_stderr_device;
   setvbuf(stderr, nullptr, _IONBF, 0);
   log_line("[smoke] Aurora smoke test started\n");
+  diagnose_sqlite();
 
   AuroraConfig config{};
   config.appName = "Wind Waker Recomp";
