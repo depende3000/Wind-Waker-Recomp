@@ -325,10 +325,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
     endif()
 endif()
 
-add_executable(dawn_offscreen_probe_elf source/dawn_offscreen_probe.cpp)
+add_executable(dawn_offscreen_probe_elf
+    source/dawn_offscreen_probe.cpp
+    ../source/common/usb_log.c
+)
 target_include_directories(dawn_offscreen_probe_elf SYSTEM PRIVATE
     "${DEVKITPRO_ROOT}/portlibs/switch/include"
 )
+target_include_directories(dawn_offscreen_probe_elf PRIVATE ../source/common)
 target_link_libraries(dawn_offscreen_probe_elf PRIVATE
     dawn::webgpu_dawn
     EGL
@@ -337,7 +341,9 @@ target_link_libraries(dawn_offscreen_probe_elf PRIVATE
     glapi
     nx
 )
-target_compile_options(dawn_offscreen_probe_elf PRIVATE -Wall -Wextra -Wpedantic)
+# -g keeps the probe's own symbols in the ELF for crash-report addresses;
+# elf2nro copies only loadable segments, so the NRO is unaffected.
+target_compile_options(dawn_offscreen_probe_elf PRIVATE -Wall -Wextra -Wpedantic -g)
 
 nx_create_nro(
     BlueWakeDawnOffscreenProbe

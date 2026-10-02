@@ -22,12 +22,16 @@
 - [x] Rebuilt all three probes from a clean checkout with Docker on Apple Silicon. The bootstrap NRO reproduces the recorded `39cc9639…` hash. The GLES NRO builds deterministically as `4ca067b1…`, not the recorded `23ccf3cb…`, so that recorded hash predates the committed `gles_probe.c`.
 - [x] Ran the `c153fe36…` Dawn NRO on hardware. Dawn found the OpenGLES adapter (`NV120`, ES 3.2) and created the device with robustness disabled and no EGL sync. Three probe bugs then stopped it: the test WGSL called `textureSample` in non-uniform control flow, the readback used a timed `WaitAny` without the `TimedWaitAny` instance feature, and the instance/adapter wrappers were `Acquire`d over references the `dawn::native` objects still owned, so they were released twice and the app closed before logging a result. All three are fixed in the `79c01d0c…` build, which still needs a physical rerun.
 - [x] The latest GLES run reached 60.4 FPS with framebuffer copy passing, but lasted 9.8 seconds; the 10-minute soak is still outstanding.
+- [x] Added a live USB log: `switch/source/common/usb_log.c` sends probe output through libnx usbComms (`057e:3000`) without ever blocking the probe, and `scripts/switch/usb_log.py` prints it on the host. The Dawn probe also builds with `-g` so its ELF can symbolize crash reports.
+- [x] Added `scripts/switch/push.sh`: copies NROs to `sdmc:/switch/wind-waker-recomp/` over the console's USB file transfer (MTP), reads each back to check its SHA-256, and pulls probe logs with `--logs`.
+- [x] Fixed the last probe bug: compatibility mode rejects `@interpolate(flat)` (implicitly `flat, first`), so the shader uses `flat, either`.
+- [x] **Dawn OpenGLES offscreen probe passes on physical hardware** (`87f88dd2…`, two runs, live USB log). Quadrants read back 255,0,0 / 5,138,20 / 5,10,148 / 255,255,0 — the two 50%-alpha quadrants match the expected blend with the clear color exactly — and the green quad occludes the red one (center 0,255,0). The app presents the readback and exits cleanly. This runs with robustness disabled and a `glFinish` per submission; it is not Aurora/GX, not a Dawn surface, and its cost is unmeasured.
 
 ## Current Dawn diagnostic artifact
 
 - Path: [BlueWakeDawnOffscreenProbe.nro](../build/switch-dawn-probe/BlueWakeDawnOffscreenProbe.nro)
 - Size: 11,489,280 bytes
-- SHA-256: `79c01d0c48cc4178d5910d716df785669afbfadfbc50454124bb25393b0d48fa` (probe fixes below; built with Docker)
+- SHA-256: `87f88dd27d5899c595cc5ad274cf116bdb9bf04d7bf9d7df36e852402d7e9acb` (**PASS on hardware**, 2026-10-02)
 - Build command: `bash scripts/switch/build_dawn_probe.sh`
 - The build scripts use Podman, or Docker when Podman is absent (`SWITCH_CONTAINER_ENGINE` forces one). The pinned devkitPro image has a native `linux/arm64` variant.
 - Console log: `sdmc:/switch/wind-waker-recomp/dawn-probe.log`
@@ -36,9 +40,9 @@ The NRO has **not** been run after the latest changes. Cross-build success does 
 
 ## Immediate pending tests
 
-- [ ] Run the current Dawn NRO on the physical Switch and provide the resulting `dawn-probe.log`.
+- [x] Run the current Dawn NRO on the physical Switch and provide the resulting `dawn-probe.log`.
 - [ ] Check the log for EGL capability details, OpenGLES adapter discovery, device/context creation, shader/pipeline creation, queue submission, mapped readback, four quadrant samples, depth-occlusion sample, and final `PASS`/`FAIL`.
-- [ ] Confirm the result image appears on screen, **+** exits cleanly, and the NRO does not hang or crash.
+- [x] Confirm the result image appears on screen, **+** exits cleanly, and the NRO does not hang or crash.
 - [ ] If adapter discovery succeeds but context creation fails, investigate Dawn's config/context path. The reported `surfaceless=yes` and `pbuffer_config=unavailable` need to be reconciled with the pinned Dawn context setup.
 - [ ] Treat the `glFinish` and disabled-robustness modes strictly as diagnostic workarounds. They are synchronous, slow, do not support shared-fence export, and are not suitable for untrusted shaders or a production game build.
 - [ ] Re-run the corrected GLES probe for 10 minutes and retain its log. Confirm the visible draw and framebuffer copy remain stable. The earlier short logs are not a soak test.

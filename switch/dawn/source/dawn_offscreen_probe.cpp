@@ -4,6 +4,9 @@
 #include <switch.h>
 #include <webgpu/webgpu_cpp.h>
 
+#include "usb_log.h"
+
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstdarg>
@@ -41,7 +44,7 @@ struct VertexOut {
     @builtin(position) position : vec4f,
     @location(0) uv : vec2f,
     @location(1) color : vec4f,
-    @location(2) @interpolate(flat) mode : u32,
+    @location(2) @interpolate(flat, either) mode : u32,
 }
 
 @group(0) @binding(0) var testTexture : texture_2d<f32>;
@@ -87,6 +90,10 @@ void log_message(const char* format, ...) {
         va_end(file_args);
         fflush(g_log);
     }
+    char usb_line[1024];
+    const int usb_length = vsnprintf(usb_line, sizeof(usb_line), format, args);
+    if (usb_length > 0)
+        usb_log_write(usb_line, std::min(static_cast<size_t>(usb_length), sizeof(usb_line) - 1));
     va_end(args);
 }
 
@@ -101,6 +108,7 @@ void log_wgpu_message(const char* prefix, wgpu::StringView message) {
             fwrite(message.data, 1, length, g_log);
             fflush(g_log);
         }
+        usb_log_write(message.data, length);
     }
     log_message("\n");
 }
@@ -666,11 +674,14 @@ bool present_readback(const std::vector<uint8_t>& pixels, bool success) {
 }  // namespace
 
 int main(int, char**) {
+    const bool usb_log_ready = usb_log_start();
     const bool sd_mounted = fsdevGetDeviceFileSystem("sdmc") != nullptr;
     g_log = sd_mounted ? open_probe_log() : nullptr;
     log_message("[probe] Dawn OpenGLES offscreen probe started; sdmc=%s log=%s\n",
                 sd_mounted ? "available (libnx auto-mount)" : "unavailable",
                 g_log != nullptr ? kLogPath : "unavailable");
+    log_message("[probe] usb live log=%s (scripts/switch/usb_log.py on the host)\n",
+                usb_log_ready ? "started" : "unavailable");
     if (!sd_mounted || g_log == nullptr)
         log_message("[probe] diagnostics may be incomplete because SD logging is unavailable\n");
 
@@ -684,5 +695,6 @@ int main(int, char**) {
         fclose(g_log);
         g_log = nullptr;
     }
+    usb_log_stop(2000);
     return success && display_ok ? 0 : 1;
 }
