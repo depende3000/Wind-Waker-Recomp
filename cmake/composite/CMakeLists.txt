@@ -15,6 +15,9 @@ set_property(CACHE COMPOSITE_OPTIMIZATION_LEVEL PROPERTY STRINGS 0 1 2)
 if(NOT COMPOSITE_OPTIMIZATION_LEVEL MATCHES "^[012]$")
   message(FATAL_ERROR "COMPOSITE_OPTIMIZATION_LEVEL must be 0, 1, or 2")
 endif()
+option(COMPOSITE_STATIC
+  "Build one relocatable object with bwc_-prefixed symbols for a statically linked host (the Switch NRO) instead of a shared library"
+  OFF)
 set(COMPOSITE_O1_FALLBACK_SOURCES
   "chunks_d_a_npc_so_148/chunk_0000_rel1_C10800F4.c;chunks_dol/chunk_0140_text1_802316E0.c;chunks_dol/chunk_0202_text1_803296E0.c"
   CACHE STRING "Composite-relative generated sources compiled at O1 when the target uses O2")
@@ -57,7 +60,17 @@ list(APPEND CHUNK_INPUTS ${DOL_CHUNK_OBJECTS})
 list(LENGTH CHUNK_INPUTS NUM_CHUNKS)
 message(STATUS "${NUM_CHUNKS} chunk translation units")
 
-add_library(${MODULE_NAME} SHARED
+if(COMPOSITE_STATIC)
+  # External DOL objects join at the ld -r step below.
+  set(COMPOSITE_LIBRARY_TYPE OBJECT)
+  set(COMPOSITE_COMPILED_CHUNKS ${CHUNK_INPUTS})
+  list(REMOVE_ITEM COMPOSITE_COMPILED_CHUNKS ${DOL_CHUNK_OBJECTS})
+else()
+  set(COMPOSITE_LIBRARY_TYPE SHARED)
+  set(COMPOSITE_COMPILED_CHUNKS ${CHUNK_INPUTS})
+endif()
+
+add_library(${MODULE_NAME} ${COMPOSITE_LIBRARY_TYPE}
   module_export.c
   dispatch_loop.c
   ${GXRUNTIME_DIR}/src/core/cpu.c
@@ -66,7 +79,7 @@ add_library(${MODULE_NAME} SHARED
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter_table.c
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter_float.c
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter_integer.c
-  ${CHUNK_INPUTS})
+  ${COMPOSITE_COMPILED_CHUNKS})
 
 set_target_properties(${MODULE_NAME} PROPERTIES PREFIX "" OUTPUT_NAME "${MODULE_NAME}" UNITY_BUILD OFF C_VISIBILITY_PRESET hidden)
 target_compile_definitions(${MODULE_NAME} PRIVATE MODULE_GAME_ID="${GAME_ID}" DOLRECOMP_CPU_HEADER="core/cpu.h")
@@ -74,7 +87,9 @@ target_include_directories(${MODULE_NAME} PRIVATE "${COMPOSITE_DIR}" "${GXRUNTIM
 if(APPLE)
   set_target_properties(${MODULE_NAME} PROPERTIES SUFFIX ".dylib")
 endif()
-target_link_libraries(${MODULE_NAME} PRIVATE m)
+if(NOT COMPOSITE_STATIC)
+  target_link_libraries(${MODULE_NAME} PRIVATE m)
+endif()
 target_compile_options(${MODULE_NAME} PRIVATE -O${COMPOSITE_OPTIMIZATION_LEVEL} -ffp-contract=off)
 
 if(COMPOSITE_OPTIMIZATION_LEVEL STREQUAL "2")
@@ -90,4 +105,28 @@ if(COMPOSITE_OPTIMIZATION_LEVEL STREQUAL "2")
     set_property(SOURCE "${FALLBACK_PATH}" APPEND PROPERTY COMPILE_OPTIONS -O1)
     message(STATUS "O1 optimizer fallback: ${FALLBACK_SOURCE}")
   endforeach()
+endif()
+
+if(COMPOSITE_STATIC)
+  # One relocatable object, then every defined global renamed to bwc_<name>:
+  # the static counterpart of the shared library's private symbol namespace.
+  # The host reaches its exports through runtime/host/src/composite_provider.c.
+  find_program(COMPOSITE_NM NAMES ${CMAKE_NM} nm REQUIRED)
+  find_program(COMPOSITE_OBJCOPY NAMES ${CMAKE_OBJCOPY} objcopy REQUIRED)
+  set(COMPOSITE_RSP "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.objects.rsp")
+  file(GENERATE OUTPUT "${COMPOSITE_RSP}"
+    CONTENT "$<JOIN:$<TARGET_OBJECTS:${MODULE_NAME}>,\n>\n$<JOIN:${DOL_CHUNK_OBJECTS},\n>\n")
+  set(COMPOSITE_COMBINED "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.combined.o")
+  set(COMPOSITE_STATIC_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/${MODULE_NAME}.o")
+  add_custom_command(
+    OUTPUT "${COMPOSITE_STATIC_OBJECT}"
+    COMMAND "${CMAKE_LINKER}" -r -o "${COMPOSITE_COMBINED}" "@${COMPOSITE_RSP}"
+    COMMAND "${CMAKE_COMMAND}" -DNM=${COMPOSITE_NM} -DOBJCOPY=${COMPOSITE_OBJCOPY}
+            -DPREFIX=bwc_ -DINPUT=${COMPOSITE_COMBINED} -DOUTPUT=${COMPOSITE_STATIC_OBJECT}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/prefix_symbols.cmake"
+    DEPENDS ${MODULE_NAME} $<TARGET_OBJECTS:${MODULE_NAME}> ${DOL_CHUNK_OBJECTS}
+            "${CMAKE_CURRENT_SOURCE_DIR}/prefix_symbols.cmake"
+    COMMAND_EXPAND_LISTS
+    VERBATIM)
+  add_custom_target(${MODULE_NAME}_static ALL DEPENDS "${COMPOSITE_STATIC_OBJECT}")
 endif()

@@ -20,6 +20,7 @@
 #include "ipl_sram.h"
 #include "card_runtime.h"
 #include "edge_intercepts.h"
+#include "composite_provider.h"
 #include "game_options.h"
 #include "fast_load.h"
 #include "fps_watch.h"
@@ -50,7 +51,6 @@
 #include "dsp_adapter_c.h"
 #endif
 
-#include <dlfcn.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -750,10 +750,10 @@ static void host_mods_enable(void* lib, CPUState* cpu) {
     typedef u32 (*CountFn)(void);
     typedef const char* (*NameFn)(u32);
     typedef u32 (*ApplyFn)(u32);
-    CountFn count = (CountFn)dlsym(lib, "bluewake_composite_mod_count");
-    NameFn name = (NameFn)dlsym(lib, "bluewake_composite_mod_name");
-    ApplyFn apply = (ApplyFn)dlsym(lib, "bluewake_composite_apply_mods");
-    g_mod_writes = (ModWritesFn)dlsym(lib, "bluewake_composite_mod_writes");
+    CountFn count = (CountFn)bluewake_composite_symbol(lib, "bluewake_composite_mod_count");
+    NameFn name = (NameFn)bluewake_composite_symbol(lib, "bluewake_composite_mod_name");
+    ApplyFn apply = (ApplyFn)bluewake_composite_symbol(lib, "bluewake_composite_apply_mods");
+    g_mod_writes = (ModWritesFn)bluewake_composite_symbol(lib, "bluewake_composite_mod_writes");
     const u32 available = count ? count() : 0u;
     const char* wanted = getenv("BLUEWAKE_MODS");
     char list[256] = "";
@@ -6499,11 +6499,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    void* lib = dlopen(dylib_path, RTLD_NOW | RTLD_LOCAL);
-    if (!lib) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 1; }
+    void* lib = bluewake_composite_open(dylib_path);
+    if (!lib) { fprintf(stderr, "composite: %s\n", bluewake_composite_error()); return 1; }
 
-    GetModuleFn get_module = (GetModuleFn)dlsym(lib, "staticrecomp_get_module");
-    if (!get_module) { fprintf(stderr, "dlsym: %s\n", dlerror()); return 1; }
+    GetModuleFn get_module = (GetModuleFn)bluewake_composite_symbol(lib, "staticrecomp_get_module");
+    if (!get_module) { fprintf(stderr, "composite: %s\n", bluewake_composite_error()); return 1; }
 
     const StaticRecompModuleDesc* mod = get_module();
     if (!mod) { fprintf(stderr, "module desc is NULL\n"); return 1; }
@@ -7080,16 +7080,16 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    GetRelDataFn get_rel_data = (GetRelDataFn)dlsym(lib, "staticrecomp_get_rel_data");
+    GetRelDataFn get_rel_data = (GetRelDataFn)bluewake_composite_symbol(lib, "staticrecomp_get_rel_data");
     u32 rel_data_count = 0u;
     const BlueWakeRelData* rel_data = get_rel_data ? get_rel_data(&rel_data_count) : NULL;
     g_rel_data = rel_data;
     g_rel_data_count = rel_data_count;
     if (rel_data) {
         GuestAliasClearFn module_alias_clear =
-            (GuestAliasClearFn)dlsym(lib, "ppc_guest_alias_clear");
+            (GuestAliasClearFn)bluewake_composite_symbol(lib, "ppc_guest_alias_clear");
         GuestAliasAddSharedFn module_alias_add_shared =
-            (GuestAliasAddSharedFn)dlsym(lib, "ppc_guest_alias_add_shared");
+            (GuestAliasAddSharedFn)bluewake_composite_symbol(lib, "ppc_guest_alias_add_shared");
         g_module_alias_add_shared = module_alias_add_shared;
         if (module_alias_clear == NULL || module_alias_add_shared == NULL) {
             fprintf(stderr, "[rel] composite is missing guest-data alias ABI\n");
@@ -7255,7 +7255,7 @@ int main(int argc, char** argv) {
         g_audio_object_watch) {
         ppc_set_mem_write_journal(heap_write_watch, &cpu);
         SetMemWriteJournalFn set_module_journal =
-            (SetMemWriteJournalFn)dlsym(lib, "bluewake_set_mem_write_journal");
+            (SetMemWriteJournalFn)bluewake_composite_symbol(lib, "bluewake_set_mem_write_journal");
         fprintf(stderr, "[heap-journal] module-bridge=%s\n",
                 set_module_journal ? "installed" : "missing");
         if (set_module_journal)
@@ -7274,7 +7274,7 @@ int main(int argc, char** argv) {
         g_chassis_service_each_block =
             getenv("BLUEWAKE_CHASSIS_SERVICE") != NULL;
         SetEdgeServiceFn set_edge_service =
-            (SetEdgeServiceFn)dlsym(lib, "bluewake_set_edge_service");
+            (SetEdgeServiceFn)bluewake_composite_symbol(lib, "bluewake_set_edge_service");
         fprintf(stderr, "[chassis] edge-service=%s\n",
                 set_edge_service ? "installed" : "missing");
         if (g_chassis_service_each_block)
