@@ -53,6 +53,8 @@ include(cmake/deferred.cmake)
 include(cmake/modules.cmake)
 # Aurora, the GameCube SDK over WebGPU (phase 2), behind TWW_WITH_AURORA.
 include(cmake/Aurora.cmake)
+# tww_sdk, the TWW-specific SDK over Aurora, and its headless test tww_sdk_smoke (with Aurora only).
+include(cmake/sdk.cmake)
 
 # Scaffold check: proves the toolchain, the include paths and the PC config header work.
 add_library(tww_scaffold_check OBJECT

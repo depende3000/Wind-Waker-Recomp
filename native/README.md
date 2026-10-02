@@ -122,3 +122,7 @@ cmake -S native -B build/native-mac -G Ninja -DTWW_WITH_AURORA=ON \
 The SDK libraries the game will link are listed in `TWW_AURORA_LIBS`. The game flags
 (`TARGET_PC`, `-fno-exceptions`, the force-included PC config header) live on the interface target
 `tww_game_headers` and never reach Aurora.
+
+`native/sdk` holds the TWW-specific SDK over Aurora: the static library `tww_sdk` and its headless
+test `tww_sdk_smoke` (`native/cmake/sdk.cmake`, built only with `TWW_WITH_AURORA=ON`); see
+`native/sdk/README.md`.
