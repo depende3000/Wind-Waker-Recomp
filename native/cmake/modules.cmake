@@ -24,7 +24,8 @@ set(TWW_MODULES
 set(TWW_MODULES_READY
         SSystem
         JSystem-core
-        JSystem-J3D)
+        JSystem-J3D
+        JSystem-2D-particle)
 
 set(TWW_ACTOR_CHUNKS 6)
 
