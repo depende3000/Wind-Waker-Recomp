@@ -23,7 +23,8 @@ set(TWW_MODULES
 # Modules whose every unit compiles (or is deferred); their options default to ON.
 set(TWW_MODULES_READY
         SSystem
-        JSystem-core)
+        JSystem-core
+        JSystem-J3D)
 
 set(TWW_ACTOR_CHUNKS 6)
 
