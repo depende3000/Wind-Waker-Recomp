@@ -1,0 +1,8 @@
+FROM docker.io/devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        cmake=3.31.6-2~bpo12+1 \
+        ninja-build=1.11.1-2~deb12u1 \
+        pkg-config=1.8.1-1 \
+    && rm -rf /var/lib/apt/lists/*
