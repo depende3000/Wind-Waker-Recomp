@@ -1,3 +1,41 @@
+## 2026-10-01 Lava in its colour: the dual-texture post transform
+
+**What was wrong.** On Windows the lava in Dragon Roost Cavern and Gohma's room (`M_DragB`) drew white with
+orange-brown streaks; the Mac's known issue ("flat orange instead of its bright pattern") is the same bug.
+Wind Waker draws its lava itself (`dMagma_packet_c`, d_magma.cpp): each texgen takes the vertex's position
+through `GX_TEXMTX2` (the floor's own placement) and then through a post-transform matrix,
+`GXSetTexCoordGen2(..., GX_PTTEXMTX0/1)`. Texcoord 0 projects the dark crust texture, scrolling; texcoord 1
+picks the colour from a ramp by height (`mPostMtx0`: scale Y by 0.05 and offset by the floor's height). TEV
+stage 0 masks by the crust's alpha, stage 1 mixes the ramp's colour with the pulsing glow (`mColor1`, black to
+`FF9600` and back over 119 frames). GXInit turns post-transform on (XF 0x1012 = 1, at 0x80320148); the renderer
+never read post-transform memory (XF 0x500-0x5FF) or the per-texgen post index (0x1050-0x1057), so both
+texgens used the floor's placement alone, and the ramp was read far outside its range. The lava is the
+only post matrix in the game that is not the identity (every other caller passes `GX_PTIDENTITY`).
+
+**The change** (RecompCore 81d7345, with 7c62903 putting the test file's line endings back; patch 0120):
+- The front end keeps post-transform memory beside `DolGxRecompState`, not in it: the saved front-end state
+  keeps its size, so save states from 0.3.0 still load (after a load the rows read as identity until the
+  game loads them again, which the lava does every frame). It tracks per row whether it is a row of the
+  identity, so a draw costs a few bit tests unless it uses a real post matrix.
+- Each draw carries the three rows for any regular texgen whose post matrix is not the identity.
+- gxcore folds them into that texgen's matrix rows (post x tex, the post rows' w into the fourth column;
+  for a two-row texgen, post x (s, t, 1)), as Dolphin's VertexShaderGen applies them. No shader or pipeline
+  key changes, so the shader caches stay valid. A post transform that normalizes first is not folded
+  (nothing in Wind Waker uses one).
+
+**Checked** (the 0.3.0 module with the new app):
+- `gxcore_tests` pass, with a new test of the fold for three- and two-row texgens.
+- Gohma's room: the lava draws orange with its dark crust where 0.3.0 drew it white, in real and in-between
+  frames (Smooth Motion 60). A save state there is `build/windows/test-saves/gohma-lava.bwstate`
+  (`BLUEWAKE_LOAD_STATE=...`); `BLUEWAKE_TEST_WARP=900:M_DragB:0:0` from the Outset save reaches it too.
+- Nothing else moved: Outset's synchronous captures (`DOL_GX_FIFO_WORKER=0`) 19 of 19 identical to the
+  release's, and the Smooth Motion dumps 62 of 62 identical to the release's on the same path. Two runs
+  that day took the other path at the title screen's presses (one with the release app itself), so a
+  mismatch there needs a second run before it means anything.
+- The pond by the boulder on Dragon Roost Island (`Adanmae`) is water, not lava, and is unchanged.
+
+The Mac line (RecompCore `bluewake`) needs the same commit and a Mac build.
+
 ## 2026-10-01 Guest loads and stores inline: about 10 percent less game-thread CPU
 
 The request after the low-end work (below): native versions of the collision and animation loops, and keep

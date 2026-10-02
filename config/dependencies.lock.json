@@ -112,7 +112,7 @@
     {
       "id": "recompcore",
       "url": "https://github.com/elliotttate/RecompCore",
-      "sha": "634895470af6e61e601f06a351f3a72888215159",
+      "sha": "7c629039cd46bd990d2ddfcf94db72e51bda20d4",
       "branch": "windows-release",
       "license": "GPL-3.0",
       "role": "static-recomp runtime (GXRuntime), vendored Aurora renderer at GXRuntime/graphics/aurora, Dolphin DSP donor sources, and the DolRecomp translator as the DolRecomp submodule; the product source for the iPad build (scripts/ios/build_device.sh)",
