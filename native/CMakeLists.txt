@@ -51,6 +51,8 @@ include(cmake/GameConfig.cmake)
 include(cmake/deferred.cmake)
 # One OBJECT library per module, each behind a TWW_MODULE_<name> option.
 include(cmake/modules.cmake)
+# Aurora, the GameCube SDK over WebGPU (phase 2), behind TWW_WITH_AURORA.
+include(cmake/Aurora.cmake)
 
 # Scaffold check: proves the toolchain, the include paths and the PC config header work.
 add_library(tww_scaffold_check OBJECT

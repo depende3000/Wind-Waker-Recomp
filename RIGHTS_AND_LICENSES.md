@@ -60,3 +60,32 @@ remaining functions were completed with AI assistance), is CC0-1.0; see `native/
 `native/README.md`. It contains no game assets: files the decompilation generates from the disc
 (`assets/`, `build/`) are produced from the player's own disc at build time and are never committed.
 
+
+## Aurora in the native port
+
+The native port builds the GameCube SDK over [Aurora](https://github.com/encounter/aurora), which
+the build fetches at a pinned commit (`native/cmake/Aurora.cmake`); this repository does not carry
+its source. Aurora fetches its own dependencies (Dawn, nod, SDL3, abseil, fmt, xxHash, imgui, Tracy
+and others), each under its own license. Aurora's license:
+
+> The MIT License
+>
+> Copyright (c) 2022 Luke Street
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
