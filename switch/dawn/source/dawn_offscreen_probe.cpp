@@ -15,7 +15,8 @@
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
-#include <thread>
+#include <functional>
+#include <pthread.h>
 #include <vector>
 
 namespace {
@@ -459,10 +460,41 @@ void run_threaded_frames(const wgpu::Instance& instance, const wgpu::Device& dev
                 completed * 1e9 / static_cast<double>(total_ns));
 }
 
-bool render_with_dawn(std::vector<uint8_t>& pixels) {
+// Runs work on a new thread and waits for it. libnx gives std::thread a
+// 128 KiB stack, which Tint's recursive WGSL parser and resolver overflow
+// (crash report 2168-0002 in tint::resolver), so use an explicit 4 MiB.
+void run_on_worker(const std::function<void()>& work) {
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 4 * 1024 * 1024);
+    pthread_t thread;
+    auto* job = const_cast<std::function<void()>*>(&work);
+    if (pthread_create(&thread, &attributes,
+                       [](void* argument) -> void* {
+                           (*static_cast<std::function<void()>*>(argument))();
+                           return nullptr;
+                       },
+                       job) != 0) {
+        log_message("[thread] pthread_create failed\n");
+    } else {
+        pthread_join(thread, nullptr);
+    }
+    pthread_attr_destroy(&attributes);
+}
+
+// One scenario: a fresh device, optionally with Dawn's
+// gl_allow_context_on_multi_threads toggle, and the test scene drawn either on
+// the thread that created the device or on a worker (as Aurora does). Worker
+// scenarios also time Aurora-sized frames.
+bool render_with_dawn(std::vector<uint8_t>& pixels, const char* label,
+                      bool context_on_multi_threads, bool render_on_worker,
+                      bool measure_frames) {
+    log_message("[scenario] %s: toggle gl_allow_context_on_multi_threads=%s, draw on %s\n",
+                label, context_on_multi_threads ? "on" : "off",
+                render_on_worker ? "worker thread" : "creating thread");
     // Initialize the shared default display first so the log captures the
     // platform extension set even if Dawn rejects adapter discovery.
-    const bool egl_robustness_available = log_egl_capabilities();
+    static const bool egl_robustness_available = log_egl_capabilities();
 
     dawn::native::DawnInstanceDescriptor dawn_descriptor;
     dawn_descriptor.SetLoggingCallback(
@@ -510,15 +542,21 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
     log_wgpu_message("[dawn] adapter description: ", adapter_info.description);
     log_wgpu_message("[dawn] adapter vendor: ", adapter_info.vendor);
     log_wgpu_message("[dawn] adapter device: ", adapter_info.device);
-    log_adapter_limits(adapter);
+    static bool limits_logged = false;
+    if (!limits_logged) {
+        log_adapter_limits(adapter);
+        limits_logged = true;
+    }
 
     wgpu::DeviceDescriptor device_descriptor = {};
     wgpu::DawnTogglesDescriptor device_toggles = {};
-    // Aurora renders from worker threads and enables this toggle; the threaded
-    // phase below exercises it.
-    std::array<const char*, 2> enabled_toggles = {{"gl_allow_context_on_multi_threads",
-                                                   "disable_robustness"}};
-    device_toggles.enabledToggleCount = egl_robustness_available ? 1 : 2;
+    std::array<const char*, 2> enabled_toggles = {};
+    size_t toggle_count = 0;
+    if (context_on_multi_threads)
+        enabled_toggles[toggle_count++] = "gl_allow_context_on_multi_threads";
+    if (!egl_robustness_available)
+        enabled_toggles[toggle_count++] = "disable_robustness";
+    device_toggles.enabledToggleCount = toggle_count;
     device_toggles.enabledToggles = enabled_toggles.data();
     device_descriptor.nextInChain = &device_toggles;
     if (!egl_robustness_available) {
@@ -545,6 +583,7 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
         log_wgpu_message(prefix, message);
     });
 
+    const auto render = [&]() -> bool {
     const std::array<uint8_t, 16> texture_pixels = {{
         255, 0, 0, 255,     0, 255, 0, 128,
         0, 0, 255, 128,     255, 255, 0, 255,
@@ -721,13 +760,18 @@ bool render_with_dawn(std::vector<uint8_t>& pixels) {
     const bool verified = verify_readback(pixels);
     log_message("[dawn] Dawn OpenGLES offscreen test %s\n",
                 verified ? "passed" : "failed pixel checks");
-    if (verified) {
-        // The device was created on this thread; Aurora submits from others.
-        std::thread perf([&] { run_threaded_frames(instance, device, pipeline, bind_group,
-                                                   vertex_buffer); });
-        perf.join();
-    }
+    if (verified && measure_frames)
+        run_threaded_frames(instance, device, pipeline, bind_group, vertex_buffer);
+    return verified;
+    };
 
+    bool verified = false;
+    if (render_on_worker) {
+        run_on_worker([&] { verified = render(); });
+    } else {
+        verified = render();
+    }
+    log_message("[scenario] %s: %s\n", label, verified ? "PASS" : "FAIL");
     device = nullptr;
     instance = nullptr;
     return verified;
@@ -820,7 +864,16 @@ int main(int, char**) {
         log_message("[probe] diagnostics may be incomplete because SD logging is unavailable\n");
 
     std::vector<uint8_t> pixels;
-    const bool success = render_with_dawn(pixels);
+    // The first scenario is the reference that is displayed. The others answer
+    // whether Aurora's threading model works on this GL stack.
+    const bool success = render_with_dawn(pixels, "A", false, false, false);
+    std::vector<uint8_t> scratch;
+    render_with_dawn(scratch, "B", false, true, false);
+    render_with_dawn(scratch, "C", true, true, false);
+    // The model Aurora would need here: one GPU thread that creates the device
+    // and does all of the GPU work, with no multi-thread toggle.
+    log_message("[scenario] D runs entirely on a worker thread (device created there)\n");
+    run_on_worker([&] { render_with_dawn(scratch, "D", false, false, true); });
     log_message("[probe] result=%s\n", success ? "PASS" : "FAIL");
     const bool display_ok = present_readback(pixels, success);
     log_message("[probe] display=%s; shutting down\n",

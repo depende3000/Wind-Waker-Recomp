@@ -26,7 +26,11 @@
 - [x] Added `scripts/switch/push.sh`: copies NROs to `sdmc:/switch/wind-waker-recomp/` over the console's USB file transfer (MTP), reads each back to check its SHA-256, and pulls probe logs with `--logs`.
 - [x] Fixed the last probe bug: compatibility mode rejects `@interpolate(flat)` (implicitly `flat, first`), so the shader uses `flat, either`.
 - [x] **Dawn OpenGLES offscreen probe passes on physical hardware** (`87f88dd2…`, two runs, live USB log). Quadrants read back 255,0,0 / 5,138,20 / 5,10,148 / 255,255,0 — the two 50%-alpha quadrants match the expected blend with the clear color exactly — and the green quad occludes the red one (center 0,255,0). The app presents the readback and exits cleanly. This runs with robustness disabled and a `glFinish` per submission; it is not Aurora/GX, not a Dawn surface, and its cost is unmeasured.
-- [ ] Run the probe build that retires the Aurora audit's top risks: it logs adapter limits (Aurora needs 2 storage buffers in the vertex stage), enables `gl_allow_context_on_multi_threads` as Aurora does, and times 300 frames at 960x720 with readback from a worker thread.
+- [x] Retired the Aurora audit's top risks on hardware (`70ecef08…`):
+  - **Limits:** 16 storage buffers in the vertex stage (Aurora needs 2), 2D textures to 16384, 256-byte uniform alignment.
+  - **Threads:** Dawn's GL context works only on the thread that created the device. Drawing from another thread loses the device, and `gl_allow_context_on_multi_threads` is broken on this Mesa: with it, nothing is drawn even on one thread. A worker thread that creates the device and does all of the GPU work passes. Aurora on Switch therefore needs a single GPU thread without that toggle.
+  - **Stacks:** libnx gives `std::thread` 128 KiB, which Tint's WGSL parser overflows (Atmosphère crash report 2168-0002 in `tint::resolver`). Threads that create shader modules need several MiB; the probe uses 4 MiB.
+  - **Cost:** 300 frames at 960x720 with readback, `glFinish` per submission: 9.07 ms average, 10.51 ms slowest. About 24 ms of a 33 ms frame remain for GX work.
 
 ## Current Dawn diagnostic artifact
 
