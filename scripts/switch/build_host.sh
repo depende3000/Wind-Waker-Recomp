@@ -34,6 +34,18 @@ if [[ $composite_src != "$root"/* ]]; then
 fi
 container_src=/work/${composite_src#"$root"/}
 
+# The donor DSP needs two of RecompCore's submodules that bootstrap.sh skips.
+recompcore="$root/ref/recompcore"
+if [[ ! -d $recompcore/.git && ! -f $recompcore/.git ]]; then
+    echo "build_host: run scripts/bootstrap.sh first" >&2
+    exit 1
+fi
+if [[ ! -f $recompcore/Externals/fmt/fmt/src/format.cc ||
+      ! -f $recompcore/Externals/xxhash/xxHash/xxhash.c ]]; then
+    git -C "$recompcore" submodule update --init --depth 1 \
+        Externals/fmt/fmt Externals/xxhash/xxHash
+fi
+
 engine=$(container_engine)
 if [[ -z $engine ]]; then
     echo "build_host: Podman or Docker is required" >&2

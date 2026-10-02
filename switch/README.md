@@ -1,5 +1,8 @@
 # Switch bootstrap probe
 
+> To build the game itself for the Switch (the headless NRO), copy it and its data to the console,
+> and read its logs, see [docs/SWITCH_BUILD.md](../docs/SWITCH_BUILD.md).
+
 This is the first implementation slice for the private Switch NRO effort. It
 checks three prerequisites on a physical console: that a libnx NRO launches,
 that the libnx framebuffer console can present text, and that the app can use
