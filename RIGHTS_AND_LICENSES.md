@@ -52,3 +52,11 @@ The bundled `composite-rt.profdata` and `host.profdata` contain LLVM profiling m
 compatibility runtime and host. They contain function identifiers and execution counts, not machine
 code. The translated-game optimization profile used by the developer is not distributed; player
 builds must generate their own from their disc. See [Builder status](docs/BUILDER.md#optimization-profiles).
+
+## Native port source (`native/tww/`)
+
+The Wind Waker decompilation source, imported from snrubrm/tww (a fork of zeldaret/tww whose
+remaining functions were completed with AI assistance), is CC0-1.0; see `native/tww/LICENSE` and
+`native/README.md`. It contains no game assets: files the decompilation generates from the disc
+(`assets/`, `build/`) are produced from the player's own disc at build time and are never committed.
+
