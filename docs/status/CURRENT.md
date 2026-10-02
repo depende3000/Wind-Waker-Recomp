@@ -25,9 +25,19 @@ only post matrix in the game that is not the identity (every other caller passes
 
 **Checked** (the 0.3.0 module with the new app):
 - `gxcore_tests` pass, with a new test of the fold for three- and two-row texgens.
-- Gohma's room: the lava draws orange with its dark crust where 0.3.0 drew it white, in real and in-between
-  frames (Smooth Motion 60). A save state there is `build/windows/test-saves/gohma-lava.bwstate`
-  (`BLUEWAKE_LOAD_STATE=...`); `BLUEWAKE_TEST_WARP=900:M_DragB:0:0` from the Outset save reaches it too.
+- Dragon Roost Cavern's big lava room (`M_NewD2` room 2): the lava glows yellow and orange where its domes
+  rise, with the dark crust over it, where 0.3.0 drew it white. The look: the floor quad draws only the
+  crust (alpha test above half on `mag_kuro`, an IA4 of blobs), tinted by the pulsing glow; under it the
+  domes (`dMagma_ballPath_c`, rising and sinking about every 11 s) take the ramp (`mag_col`, CMPR 32x32,
+  clamped in T: brown-orange at floor level through orange and yellow to white about 50 units up).
+- Gohma's room: orange with its dark crust, real and in-between frames (Smooth Motion 60). Its domes
+  (`dMagma_ballBoss_c`) sit 60-110 units under the surface in the opening cutscene and rise only near
+  Gohma, so it shows no bright patches there; judge the lava in room 2.
+- Save states (`BLUEWAKE_LOAD_STATE=...`, or copied into the data folder's `states` for F8), all with the
+  0.3.0 game module, in `build/windows/test-saves`: `drc-lava-bridge.bwstate` (Link on the rope bridge
+  above room 2's lava), `drc-lava-room.bwstate` (room 2's entrance, behind its barricade) and
+  `gohma-lava.bwstate`. `BLUEWAKE_TEST_WARP=900:M_DragB:0:0` or `900:M_NewD2:2:1` from the Outset save
+  reaches them too; `BLUEWAKE_TEST_PLACE` counts retraces from the process start, not the loaded state's.
 - Nothing else moved: Outset's synchronous captures (`DOL_GX_FIFO_WORKER=0`) 19 of 19 identical to the
   release's, and the Smooth Motion dumps 62 of 62 identical to the release's on the same path. Two runs
   that day took the other path at the title screen's presses (one with the release app itself), so a
