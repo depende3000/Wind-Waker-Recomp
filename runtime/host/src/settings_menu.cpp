@@ -7,6 +7,7 @@ extern "C" {
 #include "climb.h"
 #include "fast_load.h"
 #include "game_options.h"
+#include "haptics.h"
 #include "jump_button.h"
 #include "mouse_camera.h"
 #include "quick_doors.h"
@@ -52,6 +53,7 @@ const char* const kKeys[] = {
     "BLUEWAKE_SPRINT_SPEED",    "BLUEWAKE_MOUSE_CAMERA",    "BLUEWAKE_MOUSE_SENSITIVITY",
     "BLUEWAKE_MOUSE_INVERT_Y",  "BLUEWAKE_SIMULATION_60HZ", "BLUEWAKE_STICK_CAMERA",    "BLUEWAKE_STICK_CAMERA_SPEED",
     "BLUEWAKE_STICK_CAMERA_INVERT_X", "BLUEWAKE_STICK_CAMERA_INVERT_Y", "BLUEWAKE_STICK_AIM_SPEED",
+    "BLUEWAKE_HAPTICS",         "BLUEWAKE_HAPTICS_STRENGTH", "BLUEWAKE_HAPTICS_TRIGGERS",
     "BLUEWAKE_CLIMB",           "BLUEWAKE_CLIMB_STAMINA",
 };
 
@@ -197,6 +199,7 @@ void open_menu() {
     if (g_open)
         return;
     bluewake_mouse_camera_release();
+    bluewake_haptics_block(true);
     capture_launch_choices();
     g_open = true;
     std::fprintf(stderr, "[settings] menu open (the game is paused)\n");
@@ -206,6 +209,7 @@ void close_menu() {
     if (!g_open)
         return;
     g_open = false;
+    bluewake_haptics_block(false);
     save();
     std::fprintf(stderr, "[settings] menu closed\n");
 }
@@ -453,6 +457,35 @@ void controls_tab() {
     ImGui::TextDisabled(stick ? "In the telescope and the Picto Box the left stick (or the D-pad) zooms."
                               : "The game's right stick: its left and right follow Better Wind Waker's "
                                 "\"Invert camera\" (Gameplay).");
+
+    // Haptics (haptics.h): the game's vibration rendered from what it asked
+    // for, with the triggers; or its own on-off motor; or none.
+    ImGui::Separator();
+    static const char* const kHaptics[] = {"Off", "Classic (the game's own on and off)",
+                                           "Enhanced (shaped, with the triggers)"};
+    const std::string mode = env("BLUEWAKE_HAPTICS", "enhanced");
+    int haptics = mode[0] == 'o' || mode[0] == '0' ? 0 : mode[0] == 'c' ? 1 : 2;
+    if (combo("Controller vibration", &haptics, kHaptics, 3)) {
+        set_env("BLUEWAKE_HAPTICS", haptics == 0 ? "off" : haptics == 1 ? "classic" : "enhanced");
+        bluewake_haptics_reload();
+    }
+    ImGui::BeginDisabled(haptics == 0);
+    int strength = std::atoi(env("BLUEWAKE_HAPTICS_STRENGTH", "80").c_str());
+    if (ImGui::SliderInt("Vibration strength", &strength, 0, 100, "%d%%")) {
+        set_env("BLUEWAKE_HAPTICS_STRENGTH", std::to_string(strength));
+        bluewake_haptics_reload();
+    }
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(haptics != 2);
+    bool triggers = env_on("BLUEWAKE_HAPTICS_TRIGGERS", true);
+    if (ImGui::Checkbox("Trigger feedback (Xbox impulse triggers, DualSense trigger vibration)", &triggers)) {
+        set_env("BLUEWAKE_HAPTICS_TRIGGERS", triggers ? "1" : "0");
+        bluewake_haptics_reload();
+    }
+    ImGui::EndDisabled();
+    ImGui::TextDisabled(haptics == 2   ? "Hits, falls, explosions and quakes as the game times them, shaped by their strength."
+                        : haptics == 1 ? "The motor on and off, as a GameCube controller's."
+                                       : "No vibration. (The game's own Vibration option turns it off too.)");
 
     ImGui::Separator();
     ImGui::TextUnformatted("Keyboard");

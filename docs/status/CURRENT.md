@@ -1,3 +1,43 @@
+## 2026-10-01 Controller haptics: the game's vibration shaped, the triggers, and a rumble that never reached a controller
+
+**The rumble never reached a controller.** The host forwards the motor bits the pad library writes to
+SI<n>OUTBUF (runtime/host/src/main.c), and tested the command in the top byte (`value >> 24 == 0x40`).
+PADControlMotor writes `(0x40 << 16) | AnalogMode | command`, so the 0x40 is bits 16-23 and the test never
+matched: on every platform the game's rumble (Classic below, and the iOS app's) was never sent. With the
+command read from bits 16-23 a shock's on-off bits arrive as the game plays them (shock 5: on at retrace
+1000, off at 1008, on at 1010, off at 1014, stopped at 1018).
+
+**Haptics** (runtime/host/src/haptics.c; Windows and the Mac). The game asks for vibration through
+dVibration_c (the play info's mVibration, 0x803CA5A8, checked against its vtable 0x8037D460 once the game
+has built it): StartShock picks one of 26 motor patterns (3 to 23 game frames: a ladder from a light tap to a
+heavy blow at 1 to 8, solid bursts, three spaced taps, a double hit, thuds that fade) and StartQuake one of
+12 looping ones (12 to 62 percent of frames on) until StopQuake; the motor only had on and off, one bit a game
+frame (JUTGamePad::CRumble::update, called from the pad read). Called directly by about 70 actors, those
+functions are not dispatch boundaries the host can rely on, so the object is read each retrace instead
+(its motor shock and quake: pattern index, bits, length, frame; the frame count and state). Enhanced (the
+default) renders a shock on both motors following its bits, with a fast release (each pulse a pulse, not a
+click), at a strength from its pattern (0.5 for two frames on to 1.0 for eight), the light motor sharper on a
+pulse's first frame; a quake as a continuous rumble on the heavy motor as strong as the pattern is dense,
+textured by its bits; strong shocks and heavy quakes drive the triggers too: an Xbox controller's impulse
+triggers (SDL_RumbleGamepadTriggers where SDL reports trigger rumble) or a DualSense's trigger vibration
+(SDL_SendGamepadEffect: effect 0x26 across the whole travel, strength 1-8, 45 Hz; 0x05 clears it). The game's
+Vibration option and its pause clear the patterns and are honoured as they are; nothing is sent while a menu
+is open, with the window in the background, or after 150 ms without a game frame; rumble commands expire in
+120 ms, and a DualSense trigger effect is cleared by a timer on SDL's thread 250 ms after the last command.
+Classic forwards the game's on-off bits as before (now that they arrive); Off sends nothing. Settings:
+Controls (Windows' F1 menu and the Mac's options), `BLUEWAKE_HAPTICS=enhanced|classic|off`,
+`BLUEWAKE_HAPTICS_STRENGTH` (80), `BLUEWAKE_HAPTICS_TRIGGERS`.
+
+**Checked** (Windows, with `BLUEWAKE_HAPTICS_TEST`, which sets the motor half of the object as StartShock and
+StartQuake do, and `BLUEWAKE_HAPTICS_VIRTUAL`, an SDL virtual Xbox controller or DualSense that logs what it is
+sent): the game's Run plays the injected patterns (its frame counts 0 to the length, then clears; the rumble
+flags 0xF0000000); shock 5 (`11110110`) arrives as two pulses, heavy 0.68 and light 0.61 then 0.34 at 80
+percent, the triggers 0.44; shock 11's three taps as three pulses; quake 4 as a steady rumble that fades out
+over 100 ms when stopped; the DualSense gets 0x26 effects at strength 4 easing to 1, then 0x05, and its
+watchdog cleared the triggers only in two real stalls of 187 and 786 ms. Enhanced sends none of the game's raw
+on-off commands (17 motor changes, 0 forwarded). Not yet felt on a physical controller.
+
+
 ## 2026-10-01 Lava in its colour: the dual-texture post transform
 
 **What was wrong.** On Windows the lava in Dragon Roost Cavern and Gohma's room (`M_DragB`) drew white with

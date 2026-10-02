@@ -39,6 +39,7 @@ add_executable(bluewake_host
     src/simulation_mode.c
     src/sprint.c
     src/quick_doors.c
+    src/haptics.c
     src/draw_tags.c
     src/mouse_camera.c
     src/return_census.c
