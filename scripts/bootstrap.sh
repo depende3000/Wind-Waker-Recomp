@@ -17,7 +17,10 @@ ref_dir = pathlib.Path("ref")
 for dep in lock["dependencies"]:
     dep_id = dep["id"]
     url = dep["url"]
-    sha = dep["sha"]
+    sha = dep.get("sha")
+    if sha is None:
+        print(f"  {dep_id}: reference only (no repository to clone)")
+        continue
     if dep.get("submodule_of"):
         print(f"  {dep_id}: provided by {dep['submodule_of']} at {dep['submodule_path']}")
         continue
