@@ -18,13 +18,16 @@
 - [x] Added a diagnostic-only Switch fallback for the missing EGL synchronization extensions: `QueueGL` drains work with synchronous `glFinish` before advancing queue serials. Shared EGL fence export is unavailable in this fallback.
 - [x] Updated the build and feasibility documentation. See [SWITCH_GRAPHICS_SPIKE.md](status/SWITCH_GRAPHICS_SPIKE.md) and [Dawn probe notes](../switch/dawn/README.md).
 - [x] Verified the current NRO has `NRO0` at header offset `0x10`, passes local shell/whitespace checks, and remains ignored by Git.
+- [x] Made the Dawn patch set apply to a clean checkout. `abseil-switch-timezone-newlib.patch` and `dawn-switch-allow-native-fence-sync.patch` had been written against intermediate local edits; both are now regenerated against the sources they are applied to, and the unused `abseil-switch-timezone.patch` is removed.
+- [x] Rebuilt all three probes from a clean checkout with Docker on Apple Silicon. The bootstrap NRO reproduces the recorded `39cc9639…` hash. The GLES NRO builds deterministically as `4ca067b1…`, not the recorded `23ccf3cb…`, so that recorded hash predates the committed `gles_probe.c`.
 
 ## Current Dawn diagnostic artifact
 
 - Path: [BlueWakeDawnOffscreenProbe.nro](../build/switch-dawn-probe/BlueWakeDawnOffscreenProbe.nro)
 - Size: 11,489,280 bytes
-- SHA-256: `355a1c98acc147c452773f7c1b296326ab8c246d062b502942bb68df3f28df90`
+- SHA-256: `c153fe36211627ea933cfa2b18698448c20db826a14c5665fa88d6cb9e6ec884` (clean Docker rebuild; the earlier `355a1c98…` build came from a build tree with unrecorded patch state)
 - Build command: `bash scripts/switch/build_dawn_probe.sh`
+- The build scripts use Podman, or Docker when Podman is absent (`SWITCH_CONTAINER_ENGINE` forces one). The pinned devkitPro image has a native `linux/arm64` variant.
 - Console log: `sdmc:/switch/wind-waker-recomp/dawn-probe.log`
 
 The NRO has **not** been run after the latest changes. Cross-build success does not establish Dawn adapter creation, context creation, rendering, readback, or display success.

@@ -7,6 +7,7 @@ devkitpro=${DEVKITPRO:-/opt/devkitpro}
 image=${DEVKITPRO_DAWN_BUILD_IMAGE:-localhost/wwrecomp-switch-dawn-build:2026-10-02}
 build_dir="$root/build/switch-dawn-probe"
 jobs=${SWITCH_BUILD_JOBS:-4}
+source "$root/scripts/switch/container.sh"
 
 if [[ ${1:-} == clean ]]; then
     rm -rf "$build_dir"
@@ -26,16 +27,17 @@ if [[ -f "$devkitpro/cmake/Switch.cmake" ]] &&
     command -v ninja >/dev/null 2>&1; then
     build_nro
 else
-    if ! command -v podman >/dev/null 2>&1; then
-        echo "Dawn Switch build requires CMake, Ninja, devkitPro, or Podman." >&2
+    engine=$(container_engine)
+    if [[ -z $engine ]]; then
+        echo "Dawn Switch build requires CMake, Ninja, devkitPro, Podman or Docker." >&2
         exit 1
     fi
-    if ! podman image exists "$image"; then
-        podman build --tag "$image" --file "$root/scripts/switch/Containerfile.dawn" "$root"
+    if ! container_image_exists "$engine" "$image"; then
+        # The Containerfile copies nothing, so its own directory is the context.
+        "$engine" build --tag "$image" --file "$root/scripts/switch/Containerfile.dawn" \
+            "$root/scripts/switch"
     fi
-    podman run --rm --userns=keep-id \
-        -v "$root:/work:Z" \
-        -w /work \
+    container_run "$engine" "$root" \
         -e SWITCH_BUILD_JOBS="$jobs" \
         "$image" \
         bash -lc 'cmake -S /work/switch/dawn -B /work/build/switch-dawn-probe -G Ninja \
@@ -52,4 +54,4 @@ if [[ ! -s "$nro" ]] || [[ $(od -An -tc -j 16 -N4 "$nro" | tr -d ' \n') != NRO0 
     exit 1
 fi
 sha256sum "$nro"
-printf 'Built %s (%s bytes)\n' "$nro" "$(stat -c '%s' "$nro")"
+printf 'Built %s (%s bytes)\n' "$nro" "$(wc -c <"$nro" | tr -d ' ')"
