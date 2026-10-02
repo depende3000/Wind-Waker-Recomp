@@ -31,7 +31,8 @@ set(TWW_MODULES_READY
         m_Do
         d-core
         actors-1
-        actors-2)
+        actors-2
+        actors-3)
 
 set(TWW_ACTOR_CHUNKS 6)
 
