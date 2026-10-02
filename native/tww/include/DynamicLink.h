@@ -1,7 +1,13 @@
 #ifndef DYNAMICLINK_H
 #define DYNAMICLINK_H
 
+#if TARGET_PC
+// A quoted include looks next to this file first, so it would reach native/tww/include/dolphin
+// even when the SDK headers come from Aurora (TWW_SDK_HEADERS=aurora); <> follows the -I order.
+#include <dolphin/os/OS.h>
+#else
 #include "dolphin/os/OS.h"
+#endif
 
 class JKRArchive;
 class JKRFileCache;

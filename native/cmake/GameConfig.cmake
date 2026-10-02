@@ -20,8 +20,34 @@ set(TWW_GAME_COMPILE_DEFS
 # Same order as configure.py's -i list, minus the MSL/Runtime/MetroTRK directories: the host C
 # and C++ libraries replace MSL. native/include/pc/msl holds thin shims for the MSL-only header
 # names the game includes (algorithm.h, new.h...).
+#
+# SDK headers (docs/NATIVE_PORT_PHASE2_3.md, step 2.3, decision D2):
+# - decomp: the decomp's own dolphin/ headers under native/tww/include (phase 1).
+# - aurora: Aurora's headers are the only SDK headers. native/include/sdk holds forwarders for the
+#   SDK header names only TWW has (dolphin/os/OS.h -> <dolphin/os.h> + TWW-only declarations) and
+#   comes before Aurora, which wins every name both have, so Aurora's own includes stay
+#   consistent. native/tww/include/dolphin must never be reached (check/check_sdk_shadow.sh).
+set(TWW_SDK_HEADERS decomp CACHE STRING "SDK headers the game compiles against: decomp or aurora")
+set_property(CACHE TWW_SDK_HEADERS PROPERTY STRINGS decomp aurora)
+if (TWW_SDK_HEADERS STREQUAL "aurora")
+    if (NOT TWW_WITH_AURORA)
+        message(FATAL_ERROR "TWW_SDK_HEADERS=aurora needs TWW_WITH_AURORA=ON")
+    endif ()
+    include(${CMAKE_CURRENT_LIST_DIR}/Aurora.cmake)
+    set(TWW_SDK_INCLUDE_DIRS
+            ${TWW_NATIVE_ROOT}/include/sdk
+            ${aurora_SOURCE_DIR}/include)
+    # As Dusklight compiles the game (GameABIConfig.cmake): PSMTX* resolve to aurora_mtx's C_MTX*.
+    list(APPEND TWW_GAME_COMPILE_DEFS MTX_USE_PS=1)
+elseif (TWW_SDK_HEADERS STREQUAL "decomp")
+    set(TWW_SDK_INCLUDE_DIRS)
+else ()
+    message(FATAL_ERROR "TWW_SDK_HEADERS must be decomp or aurora (got '${TWW_SDK_HEADERS}')")
+endif ()
+
 set(TWW_GAME_INCLUDE_DIRS
         ${TWW_NATIVE_ROOT}/include
+        ${TWW_SDK_INCLUDE_DIRS}
         ${TWW_ROOT}/include
         ${TWW_ASSETS_DIR}/include
         ${TWW_ASSETS_DIR}
@@ -65,6 +91,13 @@ set(TWW_GAME_COMPILE_OPTIONS
         -Wno-writable-strings
         # 64-bit diagnostics (int-to-pointer-cast, ...) stay visible on purpose: phase 4 input.
         -ferror-limit=50)
+
+if (TWW_SDK_HEADERS STREQUAL "aurora")
+    # TWW's dolphin/types.h reached every unit through global.h; its names Aurora lacks (uint,
+    # READU32_BE, FLOAT_MIN/MAX) come from this header instead, right after the PC config header.
+    list(APPEND TWW_GAME_COMPILE_OPTIONS
+            "SHELL:-include ${TWW_NATIVE_ROOT}/include/sdk/tww_sdk_extras.h")
+endif ()
 
 add_library(tww_game_headers INTERFACE)
 target_compile_definitions(tww_game_headers INTERFACE ${TWW_GAME_COMPILE_DEFS})
