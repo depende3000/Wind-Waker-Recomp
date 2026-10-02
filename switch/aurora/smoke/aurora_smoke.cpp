@@ -23,7 +23,8 @@
 #include "usb_log.h"
 
 namespace {
-constexpr char kDataRoot[] = "sdmc:/switch/wind-waker-recomp";
+// No "sdmc:" device prefix: sqlite takes such a path as relative.
+constexpr char kDataRoot[] = "/switch/wind-waker-recomp";
 FILE* g_log = nullptr;
 
 void log_line(const char* format, ...) {

@@ -99,6 +99,10 @@ int main(int argc, char** argv) {
 
     setenv("BLUEWAKE_ROOT", DATA_ROOT, 0);
     setenv("BLUEWAKE_RENDERER", RENDERER, 0);
+    // Aurora's shader and pipeline caches (sqlite). No "sdmc:" device prefix:
+    // sqlite takes a path not starting with '/' as relative.
+    setenv("DOL_AURORA_CACHE_DIR", "/switch/wind-waker-recomp/cache", 0);
+    mkdir(DATA_ROOT "/cache", 0777);
 #if !defined(BLUEWAKE_SWITCH_AURORA)
     setenv("BLUEWAKE_LIVE_PAD", "0", 0);
     // A bounded first run: about one minute of guest time at 60 retraces/s.
