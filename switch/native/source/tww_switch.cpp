@@ -406,6 +406,7 @@ void tww_switch_start(int argc, char** argv) {
     setDefault("TWW_RUN_DIR", TWW_SWITCH_ROOT);
     setDefault("TWW_PERF_EVERY", "60");
     setDefault("TWW_HITCH_MS", "50");
+    setDefault("TWW_FPS_OVERLAY", "1");
     setDefault("TWW_STALL_S", "90");
     setDefault("TWW_ASPECT", "16:9");
 }
