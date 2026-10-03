@@ -23,6 +23,7 @@ struct Config {
     unsigned int frames = 0;         // TWW_FRAMES, 0 = off
     bool uncapped = false;           // TWW_UNCAPPED
     unsigned int perfEvery = 0;      // TWW_PERF_EVERY: game-thread frame times every N frames, 0 = off
+    const char* perfPath = nullptr;  // TWW_PERF: CSV of per-frame game-thread times (step 6.7)
     bool audio = true;               // TWW_AUDIO (off/0 -> false)
 };
 
@@ -177,6 +178,12 @@ void loadShots();
 // pc_shot.cpp: after aurora_end_frame of game frame `frame` (pc_frame_count numbering): saves the
 // presented image as shot-<frame>.png if TWW_SHOT or TWW_SHOT_EVERY names that frame.
 void shotFrameEnd(unsigned int frame);
+
+// pc_frame.cpp (step 6.7): creates the TWW_PERF file and writes its header row (exit
+// PC_EXIT_USAGE if it cannot be created); nothing without TWW_PERF. perfFlush writes out the rows
+// still buffered (pc_exit; any thread, never blocks).
+void perfOpen();
+void perfFlush();
 
 // pc_frame.cpp: "[tww] pacing: frames= wall= requested= ..." since the frame loop started (nothing
 // before it).

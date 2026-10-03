@@ -21,6 +21,8 @@
 #   --audio on|off   TWW_AUDIO (default: on since step 5.A, decision H10: JAudio and the DSP run)
 #   --audio-dump F   TWW_AUDIO_DUMP (step 5.3): the AI's DMA output as a WAV file; a relative F
 #                    is put in the run directory, e.g. --audio-dump audio.wav
+#   --perf F         TWW_PERF (step 6.7): one CSV row of game-thread times per game frame; a
+#                    relative F is put in the run directory, e.g. --perf perf.csv
 #   --sound          play the audio on SDL's default device; without it SDL_AUDIO_DRIVER=dummy
 #                    (headless; an SDL_AUDIO_DRIVER already in the environment is kept)
 #   --disc PATH      TWW_DISC, the GZLE01 revision 0 .iso: required (option or environment) for
@@ -95,6 +97,7 @@ input="${TWW_INPUT:-}"
 stage="${TWW_BOOT_STAGE:-}"
 shot="${TWW_SHOT:-}"
 audio_dump="${TWW_AUDIO_DUMP:-}"
+perf="${TWW_PERF:-}"
 sound=0
 do_build=0
 exe="$build/tww"
@@ -110,6 +113,7 @@ while [ $# -gt 0 ]; do
         --uncapped) uncapped=1; shift ;;
         --audio) audio="$2"; shift 2 ;;
         --audio-dump) audio_dump="$2"; shift 2 ;;
+        --perf) perf="$2"; shift 2 ;;
         --sound) sound=1; shift ;;
         --disc) disc="$2"; shift 2 ;;
         --input) input="$2"; shift 2 ;;
@@ -199,6 +203,12 @@ if [ -n "$audio_dump" ]; then
     export TWW_AUDIO_DUMP="$audio_dump"
 else
     unset TWW_AUDIO_DUMP
+fi
+if [ -n "$perf" ]; then
+    case "$perf" in /*) ;; *) perf="$run_dir/$perf" ;; esac
+    export TWW_PERF="$perf"
+else
+    unset TWW_PERF
 fi
 # Runs are headless (and several lanes run at once): SDL's dummy audio driver unless --sound.
 if [ "$sound" = 0 ]; then export SDL_AUDIO_DRIVER="${SDL_AUDIO_DRIVER:-dummy}"; fi
