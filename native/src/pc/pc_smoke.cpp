@@ -215,9 +215,7 @@ void requireWatchdog(const char* test, double seconds, const char* var) {
     if (strcmp(name, "stall-test") == 0) {
         requireWatchdog(name, gConfig.stallS, "TWW_STALL_S");
         writef(STDERR_FILENO, "[tww] stall-test: no frame from now on\n");
-        for (;;) {
-            pause();
-        }
+        waitForever();
     }
     if (strcmp(name, "timeout-test") == 0) {
         requireWatchdog(name, gConfig.timeoutS, "TWW_TIMEOUT_S");
