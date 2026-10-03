@@ -28,6 +28,8 @@ list(SORT _pc_sources)
 add_library(tww_pc STATIC ${_pc_sources})
 target_link_libraries(tww_pc PRIVATE tww_game_headers)
 target_include_directories(tww_pc PRIVATE "${TWW_NATIVE_ROOT}/src/pc")
+# pc_main.cpp (step 6.1) sets tww_sdk's thread hooks (tww_sdk/hooks.h); tww itself links tww_sdk.
+target_include_directories(tww_pc PRIVATE "${TWW_NATIVE_ROOT}/sdk/include")
 if (TARGET tww_link_census)
     target_link_libraries(tww_link_census PRIVATE tww_pc)
 endif ()
