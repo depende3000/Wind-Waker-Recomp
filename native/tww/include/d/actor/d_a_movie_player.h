@@ -1,10 +1,9 @@
 #ifndef D_A_MOVIE_PLAYER_H
 #define D_A_MOVIE_PLAYER_H
 
-#if TARGET_PC && defined(TWW_SDK_AURORA)
+#if TARGET_PC
 // Aurora's dolphin/thp.h has none of the player types and declares an extern "C" THPAudioDecode
 // that clashes with the static one below; take the decomp's types from tww_thp_extras.h instead.
-// TODO(native phase 2.8): drop the decomp-header branch when TWW_SDK_HEADERS=decomp goes away.
 #include "tww_thp_extras.h"
 #else
 #include "dolphin/thp.h"

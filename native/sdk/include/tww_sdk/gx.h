@@ -1,9 +1,8 @@
 // tww_sdk: GX functions of the GameCube SDK that Aurora at 3227d76 does not declare
 // (docs/NATIVE_PORT_PHASE2_3.md, step 2.6c). tww_sdk defines them in src/gx/GXExtras.cpp.
 //
-// The game sees the same names through the decomp's headers (TWW_SDK_HEADERS=decomp) or the
-// forwarders of native/include/sdk (aurora mode: GXSetDrawSync in dolphin/gx/GXMisc.h); this header
-// is for tww_sdk itself and its tests, which are compiled against Aurora's headers only.
+// The game sees the same names through the forwarders of native/include/sdk (GXSetDrawSync in
+// dolphin/gx/GXMisc.h); this header is for tww_sdk itself and its tests, which are compiled against Aurora's headers only.
 #ifndef TWW_SDK_GX_H
 #define TWW_SDK_GX_H
 

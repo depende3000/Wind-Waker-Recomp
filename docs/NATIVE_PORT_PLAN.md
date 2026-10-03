@@ -570,3 +570,26 @@ Each phase lands as its own commits; this file records decisions and measured re
   `STATIC_ASSERT` fired. Aurora mode: SSystem, the four JSystem modules, framework, m_Do, d-core,
   actors-1 to actors-6, `tww_sdk`, smoke (ok), scaffold, header and shadow checks build; default
   configuration: `tww_modules` and checks build with 0 errors.
+- **2.8 default switch:** Aurora's headers are now the game's only SDK headers and Aurora is always
+  built. `TWW_WITH_AURORA` defaults to ON and is required (`GameConfig.cmake` includes
+  `Aurora.cmake` first and stops the configure if it is OFF); the `TWW_SDK_HEADERS` cache variable
+  is gone (a stale `decomp` value stops the configure with a hint to use `cmake --fresh`). The Aurora
+  include order, `MTX_USE_PS=1` and the force-included `tww_sdk_extras.h` are unconditional;
+  `tww_sdk_shadow_check` always exists and now checks for `native/include/sdk` on the include path
+  instead of the removed `TWW_SDK_HEADERS_AURORA` marker (`check/sdk_headers.cpp` compiles
+  `__start.h`, `Padclamp.h` and the extras asserts unconditionally). Decomp mode removed for
+  `TARGET_PC` in `native/tww` too: the `TWW_SDK_AURORA` macro is gone and the 87
+  `#if TARGET_PC && defined(TWW_SDK_AURORA)` guards of step 2.7 (44 files) are plain `#if TARGET_PC`,
+  with the original GameCube code still in `#else`; the one `#elif TARGET_PC` decomp-header branch
+  (`JKRThread`'s `stack_base`/`stack_end`) is dropped, and the 54 `TODO(native phase 2.8)` notes
+  with it. The decomp's own `native/tww/include/dolphin` stays for the GameCube build and is never
+  reached under `TARGET_PC`. README (`native/README.md`, `native/sdk/README.md`) updated. Clean
+  configure (`cmake --fresh`, default options plus `FETCHCONTENT_SOURCE_DIR_AURORA`) of
+  `build/native-mac`: `ninja -k 0 tww_modules tww_sdk tww_sdk_gf tww_sdk_smoke tww_scaffold_check
+  tww_sdk_header_check` rc=0, 0 errors, all 840 module objects; `tww_sdk_shadow_check` ok (82 names,
+  none under `native/tww/include/dolphin`); `tww_sdk_smoke` prints ok. `build/native-mac-aurora` is
+  now redundant.
+  Review: rerun independently (`cmake --fresh` of `build/native-mac` with default options plus
+  `FETCHCONTENT_SOURCE_DIR_AURORA`; `ninja -k 0 tww_modules tww_sdk tww_sdk_gf tww_sdk_smoke
+  tww_scaffold_check tww_sdk_header_check` rc=0, 0 errors, 840/840 module objects; shadow check ok;
+  smoke ok; a stale `-DTWW_SDK_HEADERS=decomp` stops the configure as intended).

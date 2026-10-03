@@ -2,7 +2,8 @@
 #
 # Phase 1 (docs/NATIVE_PORT_PLAN.md): every translation unit of the game compiles to an object
 # with clang under TARGET_PC, against the host C/C++ library instead of Metrowerks' MSL.
-# Nothing is linked yet: the GameCube SDK over Aurora is phase 2, the RELs linked statically
+# Nothing is linked yet: the GameCube SDK over Aurora is phase 2 (the game compiles against
+# Aurora's SDK headers since step 2.8), the RELs linked statically
 # phase 3, 64-bit and endianness semantics phase 4, JAudio phase 5.
 #
 # Configure:  cmake -S native -B build/native-mac -G Ninja
@@ -51,11 +52,11 @@ include(cmake/GameConfig.cmake)
 include(cmake/deferred.cmake)
 # One OBJECT library per module, each behind a TWW_MODULE_<name> option.
 include(cmake/modules.cmake)
-# Aurora, the GameCube SDK over WebGPU (phase 2), behind TWW_WITH_AURORA.
+# Aurora, the GameCube SDK over WebGPU (phase 2); already included by GameConfig.cmake.
 include(cmake/Aurora.cmake)
-# tww_sdk, the TWW-specific SDK over Aurora, and its headless test tww_sdk_smoke (with Aurora only).
+# tww_sdk, the TWW-specific SDK over Aurora, and its headless test tww_sdk_smoke.
 include(cmake/sdk.cmake)
-# TWW's GF sources (native/tww/src/dolphin/gf) compiled into tww_sdk (with Aurora only).
+# TWW's GF sources (native/tww/src/dolphin/gf) compiled into tww_sdk.
 include(cmake/sdk_gf.cmake)
 # Link census (phase 2): `ninja tww_link_census` lists what the non-REL units still need.
 include(cmake/census.cmake)
@@ -67,15 +68,12 @@ add_library(tww_scaffold_check OBJECT
 target_link_libraries(tww_scaffold_check PRIVATE tww_game_headers)
 
 # SDK header check (phase 2, step 2.3): every SDK header name the decomp has, in one unit, against
-# the configured SDK headers (TWW_SDK_HEADERS). In aurora mode, tww_sdk_shadow_check also proves
-# that none of them resolves under native/tww/include/dolphin.
+# the game's SDK headers (Aurora's plus the native/include/sdk forwarders). tww_sdk_shadow_check
+# also proves that none of them resolves under native/tww/include/dolphin.
 add_library(tww_sdk_header_check OBJECT check/sdk_headers.cpp)
 target_link_libraries(tww_sdk_header_check PRIVATE tww_game_headers)
-if (TWW_SDK_HEADERS STREQUAL "aurora")
-    target_compile_definitions(tww_sdk_header_check PRIVATE TWW_SDK_HEADERS_AURORA=1)
-    add_custom_target(tww_sdk_shadow_check
-            COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/check/check_sdk_shadow.sh" "${CMAKE_BINARY_DIR}"
-            DEPENDS tww_sdk_header_check
-            USES_TERMINAL
-            COMMENT "Checking that no SDK header resolves under native/tww/include/dolphin")
-endif ()
+add_custom_target(tww_sdk_shadow_check
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/check/check_sdk_shadow.sh" "${CMAKE_BINARY_DIR}"
+        DEPENDS tww_sdk_header_check
+        USES_TERMINAL
+        COMMENT "Checking that no SDK header resolves under native/tww/include/dolphin")

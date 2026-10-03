@@ -4,8 +4,8 @@
 // both TWW's and Aurora's, so Aurora's wins and no forwarder can sit in front of it. TWW's card.h
 // spells the CARD result codes CARD_ERROR_* (an anonymous enum); Aurora's spells them
 // CARD_RESULT_* (macros) with the same values. A game unit that uses the CARD_ERROR_* names
-// includes this header after dolphin/card.h under `TARGET_PC && defined(TWW_SDK_AURORA)`.
-// TODO(native phase 2.8): include it unconditionally once TWW_SDK_HEADERS=decomp is gone.
+// includes this header after dolphin/card.h under `TARGET_PC` (the GameCube build keeps TWW's own
+// card.h, which declares them).
 #ifndef TWW_CARD_EXTRAS_H
 #define TWW_CARD_EXTRAS_H
 

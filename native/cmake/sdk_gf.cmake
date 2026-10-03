@@ -9,9 +9,9 @@
 #
 # - Compiled against Aurora's SDK headers plus the forwarders in native/include/sdk (the TWW-only
 #   names dolphin/gf/GF.h, dolphin/gf/GFTransform.h, dolphin/os/OS.h), with the TWW-only GF
-#   declarations from native/include/sdk/tww_gf_extras.h. The same include order as the game in
-#   TWW_SDK_HEADERS=aurora mode, whatever TWW_SDK_HEADERS is: native/tww/include is never on the
-#   path, and neither are the game's flags (tww_game_headers).
+#   declarations from native/include/sdk/tww_gf_extras.h. The same include order as the game's
+#   (GameConfig.cmake), except that native/tww/include is never on the path, and neither are the
+#   game's flags (tww_game_headers).
 # - An OBJECT library of its own (this file, not sdk.cmake, so 2.6d does not touch the glob), whose
 #   objects go into tww_sdk.
 # - One TARGET_PC edit (GFGeometry.cpp): Aurora ignores CP_REG_ARRAYBASE, so GFSetArraySized writes
@@ -32,8 +32,7 @@ set(TWW_SDK_GF_SOURCES
         "${TWW_ROOT}/src/dolphin/gf/GFTransform.cpp")
 
 add_library(tww_sdk_gf OBJECT ${TWW_SDK_GF_SOURCES})
-# Forwarders first, then Aurora's include (from the aurora::* targets below), as in GameConfig's
-# aurora mode. Only GF, GD, GX, MTX and OS are needed; the full list keeps the defines identical
+# Forwarders first, then Aurora's include (from the aurora::* targets below), as in GameConfig. Only GF, GD, GX, MTX and OS are needed; the full list keeps the defines identical
 # to tww_sdk's.
 target_include_directories(tww_sdk_gf PRIVATE "${TWW_NATIVE_ROOT}/include/sdk")
 target_compile_definitions(tww_sdk_gf PRIVATE MTX_USE_PS=1)
