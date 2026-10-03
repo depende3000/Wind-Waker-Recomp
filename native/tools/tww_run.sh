@@ -21,6 +21,8 @@
 #   --input PATH     TWW_INPUT, the controller script (step 6.3; a relative path is taken from the
 #                    current directory, else from the repository); pad-echo defaults to
 #                    native/check/input/pad-echo.txt
+#   --stage SPEC     TWW_BOOT_STAGE, debug stage boot (step 6.4): <stage>:<room>[:<point>[:<layer>]],
+#                    e.g. sea:44:206 (Outset, where the new game starts)
 #   --build          run `ninja -C build/native-mac tww` first
 #   --exe PATH       the executable (default build/native-mac/tww)
 #   --quiet          do not print the tail of the log on failure
@@ -70,6 +72,7 @@ uncapped="${TWW_UNCAPPED:-}"
 audio="${TWW_AUDIO:-on}"
 disc="${TWW_DISC:-/Users/kevin/Documents/windwaker/GZLE01.iso}"
 input="${TWW_INPUT:-}"
+stage="${TWW_BOOT_STAGE:-}"
 do_build=0
 exe="$build/tww"
 quiet=0
@@ -84,6 +87,7 @@ while [ $# -gt 0 ]; do
         --audio) audio="$2"; shift 2 ;;
         --disc) disc="$2"; shift 2 ;;
         --input) input="$2"; shift 2 ;;
+        --stage) stage="$2"; shift 2 ;;
         --build) do_build=1; shift ;;
         --exe) exe="$2"; shift 2 ;;
         --quiet) quiet=1; shift ;;
@@ -141,6 +145,7 @@ export TWW_STALL_S="$stall_s"
 export TWW_AUDIO="$audio"
 export TWW_RUN_DIR="$run_dir"
 [ -n "$frames" ] && export TWW_FRAMES="$frames"
+if [ -n "$stage" ]; then export TWW_BOOT_STAGE="$stage"; else unset TWW_BOOT_STAGE; fi
 [ -n "$trace" ] && export TWW_TRACE="$trace"
 [ -n "$uncapped" ] && export TWW_UNCAPPED="$uncapped"
 
