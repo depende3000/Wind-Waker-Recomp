@@ -102,6 +102,7 @@ void pc_harness_init(int argc, char* argv[]) {
     gConfig.frames = envCount("TWW_FRAMES");
     gConfig.uncapped = envFlag("TWW_UNCAPPED", false);
     gConfig.audio = envFlag("TWW_AUDIO", true);
+    gConfig.perfEvery = envCount("TWW_PERF_EVERY");
 
     writef(STDERR_FILENO,
            "[tww] harness: smoke=%s milestone=%s timeout=%gs stall=%gs frames=%u trace=%s "
@@ -111,6 +112,11 @@ void pc_harness_init(int argc, char* argv[]) {
            gConfig.uncapped ? 1 : 0, gConfig.audio ? "on" : "off",
            gConfig.input ? gConfig.input : "-", gConfig.bootStage ? gConfig.bootStage : "-",
            gConfig.disc ? gConfig.disc : "-");
+
+    if (gConfig.perfEvery != 0) {
+        writef(STDERR_FILENO, "[tww] perf: game-thread frame times every %u frames (TWW_PERF_EVERY)\n",
+               gConfig.perfEvery);
+    }
 
     if (gConfig.milestone != nullptr && !isKnownMilestone(gConfig.milestone)) {
         writef(STDERR_FILENO, "[tww] unknown TWW_MILESTONE \"%s\"; known:", gConfig.milestone);

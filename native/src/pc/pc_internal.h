@@ -22,6 +22,7 @@ struct Config {
     double stallS = 0;               // TWW_STALL_S, 0 = off
     unsigned int frames = 0;         // TWW_FRAMES, 0 = off
     bool uncapped = false;           // TWW_UNCAPPED
+    unsigned int perfEvery = 0;      // TWW_PERF_EVERY: game-thread frame times every N frames, 0 = off
     bool audio = true;               // TWW_AUDIO (off/0 -> false)
 };
 

@@ -16,6 +16,7 @@
  *   TWW_RUN_DIR    directory for backtrace.txt / stall.txt (set by native/tools/tww_run.sh)
  *   TWW_INPUT      input script for controller port 0 (step 6.3, pc_input.cpp)
  *   TWW_BOOT_STAGE <stage>:<room>[:<point>[:<layer>]]: debug stage boot (step 6.4, pc_boot.cpp)
+ *   TWW_PERF_EVERY every this many frames, one line of game-thread frame times (pc_frame.cpp)
  *
  * Exit codes: see PC_EXIT_* below.
  */
