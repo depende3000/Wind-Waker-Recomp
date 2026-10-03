@@ -12,7 +12,8 @@
 //
 // Run options: TWW_SWITCH_ROOT/env.txt, one NAME=value per line (# comments), applied before the
 // Switch defaults (setenv without overwrite): TWW_DISC (the shared GZLE01.iso), TWW_RUN_DIR (the
-// native directory, for backtrace.txt), TWW_PERF_EVERY=60 and TWW_STALL_S=90.
+// native directory, for backtrace.txt), TWW_PERF_EVERY=60, TWW_STALL_S=90 and TWW_ASPECT=16:9 (the
+// console's 1280x720 screen; TWW_ASPECT=4:3 in env.txt gives the GameCube picture, pillarboxed).
 //
 // Crash report: libnx's user exception handler prints the exception, the registers, the thread,
 // the NRO's load address and a frame-pointer backtrace as offsets into tww.elf (for addr2line),
@@ -405,6 +406,7 @@ void tww_switch_start(int argc, char** argv) {
     setDefault("TWW_RUN_DIR", TWW_SWITCH_ROOT);
     setDefault("TWW_PERF_EVERY", "60");
     setDefault("TWW_STALL_S", "90");
+    setDefault("TWW_ASPECT", "16:9");
 }
 
 void tww_switch_flush_logs(void) {

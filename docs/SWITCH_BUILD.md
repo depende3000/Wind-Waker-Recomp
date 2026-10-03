@@ -200,7 +200,8 @@ Run options come from `native/env.txt`, one `NAME=value` per line, with `#` comm
 ([switch/native/env.example.txt](../switch/native/env.example.txt)); they are the Mac's `TWW_*`
 variables ([native/README.md](../native/README.md), "Running tww"). Without the file:
 `TWW_DISC=/switch/wind-waker-recomp/GZLE01.iso`, `TWW_RUN_DIR=/switch/wind-waker-recomp/native`,
-`TWW_PERF_EVERY=60` and `TWW_STALL_S=90`.
+`TWW_PERF_EVERY=60`, `TWW_STALL_S=90` and `TWW_ASPECT=16:9` (the widescreen option on the
+1280x720 screen; `TWW_ASPECT=4:3` gives the GameCube picture, pillarboxed).
 
 What the log shows, in order (the same `[tww]` lines as on the Mac; values vary):
 
