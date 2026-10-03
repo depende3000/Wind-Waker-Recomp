@@ -44,6 +44,8 @@
 #                    pipeline before its first draw (TWW_SYNC_PIPELINES, default on with shots), so
 #                    a shot never misses a draw whose pipeline was still compiling
 #   --aspect A       TWW_ASPECT: 4:3, 16:9 or 16:10 (the widescreen option, docs/MODS.md)
+#   --heap-check N   TWW_HEAP_CHECK: every N game frames check() every JKR heap (and, on the
+#                    Switch, walk newlib's free lists); a damaged heap ends the run as exit 1
 #   --build          run `ninja -C build/native-mac tww` first
 #   --exe PATH       the executable (default build/native-mac/tww)
 #   --run-dir DIR    put the run in DIR (created; must not exist yet) instead of
@@ -108,6 +110,7 @@ shot="${TWW_SHOT:-}"
 audio_dump="${TWW_AUDIO_DUMP:-}"
 perf="${TWW_PERF:-}"
 aspect="${TWW_ASPECT:-}"
+heap_check="${TWW_HEAP_CHECK:-}"
 sound=0
 do_build=0
 exe="$build/tww"
@@ -130,6 +133,7 @@ while [ $# -gt 0 ]; do
         --stage) stage="$2"; shift 2 ;;
         --shot) shot="$2"; shift 2 ;;
         --aspect) aspect="$2"; shift 2 ;;
+        --heap-check) heap_check="$2"; shift 2 ;;
         --build) do_build=1; shift ;;
         --exe) exe="$2"; shift 2 ;;
         --quiet) quiet=1; shift ;;
@@ -211,6 +215,7 @@ if [ -n "$stage" ]; then export TWW_BOOT_STAGE="$stage"; else unset TWW_BOOT_STA
 [ -n "$shot" ] && export TWW_SHOT="$shot"
 [ -n "$uncapped" ] && export TWW_UNCAPPED="$uncapped"
 if [ -n "$aspect" ]; then export TWW_ASPECT="$aspect"; else unset TWW_ASPECT; fi
+if [ -n "$heap_check" ]; then export TWW_HEAP_CHECK="$heap_check"; else unset TWW_HEAP_CHECK; fi
 if [ -n "$audio_dump" ]; then
     case "$audio_dump" in /*) ;; *) audio_dump="$run_dir/$audio_dump" ;; esac
     export TWW_AUDIO_DUMP="$audio_dump"

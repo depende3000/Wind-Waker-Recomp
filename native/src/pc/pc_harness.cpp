@@ -137,6 +137,7 @@ void pc_harness_init(int argc, char* argv[]) {
     gConfig.perfPath = envString("TWW_PERF");
     pc_aspect_init();
     gConfig.hitchMs = envCount("TWW_HITCH_MS");
+    gConfig.heapCheckEvery = envCount("TWW_HEAP_CHECK");
     gConfig.fpsOverlay = envFlag("TWW_FPS_OVERLAY", false);
 
     writef(STDERR_FILENO,
