@@ -61,6 +61,32 @@ remaining functions were completed with AI assistance), is CC0-1.0; see `native/
 (`assets/`, `build/`) are produced from the player's own disc at build time and are never committed.
 
 
+## Code adapted from Dusklight in the native port
+
+[Dusklight](https://github.com/TwilitRealm/dusklight), the native port of *Twilight Princess* on
+Aurora, is dedicated to the public domain under CC0-1.0 (its `LICENSE.md`). The native port studies
+it from a local, untracked checkout (`ref/dusklight`, commit `40457c6`); the repository does not
+carry it. Code adapted or copied from it is CC0 and starts with a provenance comment naming the
+Dusklight file it came from:
+
+- the TWW SDK layer `native/sdk/src` (phase 2): `os/OSThread.cpp`, `os/OSMutex.cpp`,
+  `os/OSContext.cpp`, `os/OSInterrupt.cpp`, `os/OSMessage.cpp`, `os/OSReport.cpp`,
+  `os/OSMisc.cpp`, `os/OSReset.cpp`, `os/OSSram.cpp`, `os/PPC.cpp`, `vi/VIRetrace.cpp`,
+  `gx/GXExtras.cpp`, `exi/EXI.cpp`, `audio/AIStubs.cpp` and `runtime/extras.c` (from Dusklight's
+  `src/dusk`), and `audio/DTK.cpp` (copied from `libs/dolphin/src/dtk/dtk.c`);
+- `TARGET_PC` changes to the decompilation in `native/tww` (phases 2 and 3): `src/c/c_dylink.cpp`
+  and `src/DynamicLink.cpp` (the REL loader replaced by static linking), `src/f_pc/f_pc_profile.cpp`
+  and `src/f_pc/f_pc_profile_lst.cpp` (the static profile list and its typed entries),
+  `src/JSystem/JKernel/JKRHeap.cpp` (the allocation fallback before any heap exists),
+  `src/m_Do/m_Do_main.cpp` (the `aurora/main.h` entry point) and
+  `src/SSystem/SComponent/c_xyz.cpp` (`cXyz::atan2sX_Z`).
+
+Other files name Dusklight only as the model they follow (CMake layout, header forwarders, the
+same `TARGET_PC` choice) and copy no code from it. The other files of `native/sdk/src` carry a
+provenance comment too, saying that they follow the decompilation's own SDK source (CC0, like the
+rest of `native/tww`) or were written for this project.
+
+
 ## Aurora in the native port
 
 The native port builds the GameCube SDK over [Aurora](https://github.com/encounter/aurora), which
