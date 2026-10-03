@@ -23,6 +23,8 @@ extern "C" void tww_switch_gfx_stats(TwwSwitchGfxStats* out) {
     dawn_switch_gl_cmd_stats(cmd, 60);
     uint64_t dvd[3] = {};
     tww_switch_nod_stats(dvd);
+    uint64_t cpu[TWW_SWITCH_THREAD_ROLES] = {};
+    tww_switch_thread_cpu_ns(cpu);
     *out = TwwSwitchGfxStats{
         .frameSlotWaitNs = a.frameSlotWaitNs,
         .stagingWaitNs = a.stagingWaitNs,
@@ -108,5 +110,10 @@ extern "C" void tww_switch_gfx_stats(TwwSwitchGfxStats* out) {
         .gpuDisjoint = cmd[57],
         .gpuDropped = cmd[58],
         .gpuTimerState = cmd[59],
+        .cpuGameNs = cpu[TWW_SWITCH_THREAD_GAME],
+        .cpuRenderNs = cpu[TWW_SWITCH_THREAD_RENDER],
+        .cpuAudioNs = cpu[TWW_SWITCH_THREAD_AUDIO],
+        .cpuDvdNs = cpu[TWW_SWITCH_THREAD_DVD],
+        .cpuOtherNs = cpu[TWW_SWITCH_THREAD_OTHER],
     };
 }
