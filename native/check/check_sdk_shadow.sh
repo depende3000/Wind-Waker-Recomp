@@ -2,11 +2,14 @@
 # SDK shadow check (phase 2, step 2.3; docs/NATIVE_PORT_PHASE2_3.md, decision D2).
 #
 # Aurora's headers are the only SDK headers (the default and only mode since step 2.8): the decomp's own
-# native/tww/include/dolphin must never be reached. This script
+# native/tww/include/dolphin must never be reached. Nor must native/tww/include/helpers, the
+# GameCube shims of the port helpers in native/include/helpers (phase 4, step 4.0b of
+# docs/NATIVE_PORT_PHASE4_6.md). This script
 #   1. reruns the compile of check/sdk_headers.cpp from compile_commands.json with -M (the -MD
 #      dependency list, written to <build>/sdk_headers.deps),
-#   2. fails if any dependency resolves under native/tww/include/dolphin,
-#   3. fails if a header name under native/tww/include/dolphin is missing from sdk_headers.cpp,
+#   2. fails if any dependency resolves under native/tww/include/{dolphin,helpers},
+#   3. fails if a header name under native/tww/include/{dolphin,helpers} is missing from
+#      sdk_headers.cpp,
 #   4. lists the names still pending (between TWW_SDK_PENDING_BEGIN/END; none since step 2.4).
 #
 # Usage: native/check/check_sdk_shadow.sh [build-dir]     (default: build/native-mac)
@@ -23,7 +26,11 @@ import json, os, re, shlex, subprocess, sys
 
 native, build = sys.argv[1], sys.argv[2]
 unit = os.path.join(native, "check", "sdk_headers.cpp")
-tww_dolphin = os.path.realpath(os.path.join(native, "tww", "include", "dolphin"))
+tww_include = os.path.realpath(os.path.join(native, "tww", "include"))
+tww_dolphin = os.path.join(tww_include, "dolphin")
+# Directories of the decomp tree that the native build must never reach (each name in them is
+# listed in sdk_headers.cpp and must resolve elsewhere).
+shadowed_dirs = [tww_dolphin, os.path.join(tww_include, "helpers")]
 deps_path = os.path.join(build, "sdk_headers.deps")
 
 def fail(msg):
@@ -68,17 +75,19 @@ with open(deps_path) as f:
 text = text.split(":", 1)[1] if ":" in text else text
 deps = [d.replace("\\ ", " ") for d in re.findall(r"(?:\\ |[^\s])+", text)]
 deps = [os.path.realpath(os.path.join(entry["directory"], d)) for d in deps]
-shadowed = sorted(d for d in deps if d == tww_dolphin or d.startswith(tww_dolphin + os.sep))
+shadowed = sorted(d for d in deps for sd in shadowed_dirs if d == sd or d.startswith(sd + os.sep))
 if shadowed:
     for d in shadowed:
         print("  reached: " + os.path.relpath(d, native))
-    fail("%d dependencies resolve under native/tww/include/dolphin" % len(shadowed))
+    fail("%d dependencies resolve under native/tww/include/{dolphin,helpers}" % len(shadowed))
 
-# 3. Every decomp SDK header name is listed in the unit.
-names = sorted(os.path.relpath(os.path.join(dp, fn), os.path.dirname(tww_dolphin))
-               for dp, _, fns in os.walk(tww_dolphin) for fn in fns if fn.endswith(".h"))
+# 3. Every decomp SDK header name and every helper shim name is listed in the unit.
+names = sorted(os.path.relpath(os.path.join(dp, fn), tww_include)
+               for sd in shadowed_dirs
+               for dp, _, fns in os.walk(sd) for fn in fns if fn.endswith((".h", ".hpp")))
+n_helpers = sum(1 for n in names if n.startswith("helpers/"))
 src = open(unit).read()
-listed = set(re.findall(r"^\s*#\s*include\s*[<\"](dolphin/[^>\"]+)[>\"]", src, re.M))
+listed = set(re.findall(r"^\s*#\s*include\s*[<\"]((?:dolphin|helpers)/[^>\"]+)[>\"]", src, re.M))
 missing = [n for n in names if n not in listed]
 if missing:
     fail("not listed in check/sdk_headers.cpp: " + " ".join(missing))
@@ -89,9 +98,9 @@ pending = sorted(set(re.findall(r"#\s*include\s*[<\"](dolphin/[^>\"]+)[>\"]", m.
 
 sdk_fwd = os.path.realpath(os.path.join(native, "include", "sdk")) + os.sep
 forwarded = sum(1 for d in deps if d.startswith(sdk_fwd))
-print("check_sdk_shadow: ok: %d names checked, %d pending, %d dependencies, %d from "
-      "native/include/sdk, none under native/tww/include/dolphin"
-      % (len(names) - len(pending), len(pending), len(deps), forwarded))
+print("check_sdk_shadow: ok: %d names checked (%d helpers), %d pending, %d dependencies, %d from "
+      "native/include/sdk, none under native/tww/include/{dolphin,helpers}"
+      % (len(names) - len(pending), n_helpers, len(pending), len(deps), forwarded))
 if pending:
     print("  pending (no forwarder yet): " + " ".join(pending))
 PY
