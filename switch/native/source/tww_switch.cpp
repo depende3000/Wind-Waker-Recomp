@@ -458,6 +458,8 @@ void tww_switch_start(int argc, char** argv) {
     setDefault("TWW_FPS_OVERLAY", "1");
     setDefault("TWW_STALL_S", "90");
     setDefault("TWW_ASPECT", "16:9");
+    // The internal resolution: 1280x720, the screen's (TWW_FB_SCALE=1.125 960x540, 1.0 854x480).
+    setDefault("TWW_FB_SCALE", "1.5");
 }
 
 void tww_switch_flush_logs(void) {

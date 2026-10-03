@@ -202,8 +202,19 @@ Run options come from `native/env.txt`, one `NAME=value` per line, with `#` comm
 ([switch/native/env.example.txt](../switch/native/env.example.txt)); they are the Mac's `TWW_*`
 variables ([native/README.md](../native/README.md), "Running tww"). Without the file:
 `TWW_DISC=/switch/wind-waker-recomp/GZLE01.iso`, `TWW_RUN_DIR=/switch/wind-waker-recomp/native`,
-`TWW_PERF_EVERY=60`, `TWW_HITCH_MS=50`, `TWW_STALL_S=90` and `TWW_ASPECT=16:9` (the widescreen
-option on the 1280x720 screen; `TWW_ASPECT=4:3` gives the GameCube picture, pillarboxed).
+`TWW_PERF_EVERY=60`, `TWW_HITCH_MS=50`, `TWW_STALL_S=90`, `TWW_ASPECT=16:9` (the widescreen
+option on the 1280x720 screen; `TWW_ASPECT=4:3` gives the GameCube picture, pillarboxed) and
+`TWW_FB_SCALE=1.5` (the internal resolution, see below).
+
+Internal resolution: `TWW_FB_SCALE` is Aurora's frame-buffer scale (`VISetFrameBufferScale`, the
+"internal resolution" setting of Dusklight): the game's 640x480 EFB times the scale, widened to the
+screen's 16:9. `1.5` is 1280x720 (the default, the screen's own size), `1.125` is 960x540 (44 %
+fewer pixels), `1.0` is 854x480 (the GameCube's vertical resolution, 56 % fewer); EFB copies
+(shadows, depth of field, haze) scale with it and the present pass resamples the picture to the
+screen, so the HUD and text are drawn at that resolution too. The docs/SWITCH_PERF_STUDY.md study
+expects the Outset frame to be GPU-bound: if the `perf-switch gpu` line says so, a smaller scale is
+the lever (`[tww] fb scale:` in the log confirms the value). The default stays 1.5 until a hardware
+run decides.
 
 What the log shows, in order (the same `[tww]` lines as on the Mac; values vary):
 
