@@ -21,6 +21,11 @@ typedef unsigned int uint;
     (((u32)ptr[offset] << 24) | ((u32)ptr[offset + 1] << 16) | ((u32)ptr[offset + 2] << 8) |       \
      (u32)ptr[offset + 3]);
 
+// Set only in aurora mode (this header is force-included only there). Lets a native/tww header pick
+// an Aurora spelling (e.g. GXRenderModeObj::aa) while TWW_SDK_HEADERS=decomp still exists.
+// TODO(native phase 2.8): remove together with decomp mode and the `defined(TWW_SDK_AURORA)` tests.
+#define TWW_SDK_AURORA 1
+
 #define FLOAT_MIN (1.175494351e-38f)
 #define FLOAT_MAX (3.40282346638528860e+38f)
 
