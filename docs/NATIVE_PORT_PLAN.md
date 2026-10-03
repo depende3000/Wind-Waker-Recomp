@@ -2919,6 +2919,16 @@ Plan, milestones and decisions: `docs/NATIVE_PORT_PHASE4_6.md`.
   unchanged, GameCube path unchanged (unifdef), regress passes. Committed as two commits (the
   J3DTransform host bodies, then the skin deform byte order).
 
+- **Fix NG-run-dir (M11 boot loop, lane audio, harness): parallel runs of one target shared a run
+  directory.** `tww_run.sh` tested a directory name for existence and then created it with
+  `mkdir -p`, so runs of one target started in the same second (`tww_regress.sh -j`, 4 parallel
+  `new-game` runs) took the same name and so one memory card folder (`<run dir>/card/`); their
+  logs show `[aurora::card] Failed to create file: gczelda`. It now claims the name with a plain
+  `mkdir` (atomic) and tries the next suffix on failure. This removes one failure mode under
+  parallel load only: the `MemCardMakeGameFile` 1-frame failure still happened with a private card
+  (1 of 3 sequential runs, uncapped, reviewer run `new-game-20261003-191900`: no card error in the
+  log, `01-GZLE-gczelda.gci` written, but `SaveSync()` returned 2); see fix NG-memcard-sync.
+
 ### Phase 6 render issues
 
 - **Aurora WGSL for an alpha compare on a texture's alpha** (found by step 6.4, sea room 44,
