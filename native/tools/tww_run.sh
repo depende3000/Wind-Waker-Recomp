@@ -17,7 +17,9 @@
 #   --trace LIST     trace channels (TWW_TRACE), e.g. res,scene
 #   --uncapped       TWW_UNCAPPED=1
 #   --audio on|off   TWW_AUDIO (default: on since step 5.A, decision H10: JAudio and the DSP run)
-#   --disc PATH      TWW_DISC, default /Users/kevin/Documents/windwaker/GZLE01.iso
+#   --disc PATH      TWW_DISC, the GZLE01 revision 0 .iso: required (option or environment) for
+#                    every target that boots the game; without either, the maintainer's
+#                    /Users/kevin/Documents/windwaker/GZLE01.iso is used only if it exists
 #   --input PATH     TWW_INPUT, the controller script (step 6.3; a relative path is taken from the
 #                    current directory, else from the repository); pad-echo defaults to
 #                    native/check/input/pad-echo.txt
@@ -73,7 +75,9 @@ frames=""
 trace="${TWW_TRACE:-}"
 uncapped="${TWW_UNCAPPED:-}"
 audio="${TWW_AUDIO:-on}"
-disc="${TWW_DISC:-/Users/kevin/Documents/windwaker/GZLE01.iso}"
+disc="${TWW_DISC:-}"
+legacy_disc=/Users/kevin/Documents/windwaker/GZLE01.iso
+[ -z "$disc" ] && [ -f "$legacy_disc" ] && disc="$legacy_disc"
 input="${TWW_INPUT:-}"
 stage="${TWW_BOOT_STAGE:-}"
 shot="${TWW_SHOT:-}"
@@ -103,6 +107,13 @@ done
 case "$timeout_s" in ''|*[!0-9.]*) echo "tww_run: --timeout needs seconds" >&2; exit 2 ;; esac
 case "$stall_s" in ''|*[!0-9.]*) echo "tww_run: --stall needs seconds" >&2; exit 2 ;; esac
 
+needs_disc=1
+case "$target" in static-init|crash-test|panic-test|stall-test|timeout-test) needs_disc=0 ;; esac
+if [ "$needs_disc" = 1 ] && [ -z "$disc" ]; then
+    echo "tww_run: no disc image: pass --disc PATH or set TWW_DISC (the GZLE01 revision 0 .iso)" >&2
+    exit 14
+fi
+
 if [ "$do_build" = 1 ]; then
     ninja -C "$build" tww >/dev/null || { echo "tww_run: build failed" >&2; exit 2; }
 fi
@@ -114,8 +125,6 @@ mkdir -p "$runs"
 # --- disc: SHA-1 of the image and of main.dol on first use (decision H9) -----------------------
 # Only when the target boots the game: a smoke test that runs before the disc check needs none.
 # A missing file is left to tww, which exits 14 with its own message.
-needs_disc=1
-case "$target" in static-init|crash-test|panic-test|stall-test|timeout-test) needs_disc=0 ;; esac
 if [ "$needs_disc" = 1 ] && [ -f "$disc" ]; then
     python3 "$disc_manifest" --verify --quiet --disc "$disc" || exit 14
 fi

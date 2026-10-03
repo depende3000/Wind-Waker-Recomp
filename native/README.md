@@ -343,7 +343,7 @@ TWW_DISC=/nonexistent build/native-mac/tww; echo $?   # 14
 
 | Variable | Meaning |
 | --- | --- |
-| `TWW_DISC` | the GZLE01 revision 0 `.iso` (required to boot; `tww_run.sh` defaults it to `/Users/kevin/Documents/windwaker/GZLE01.iso`, never committed) |
+| `TWW_DISC` | the GZLE01 revision 0 `.iso` (required to boot; `tww_run.sh --disc PATH` sets it, and `tww_run.sh`, `tww_regress.sh` and `disc_manifest.py` stop with exit 14 when neither is given) |
 | `TWW_SMOKE` | a smoke test: `static-init`, and the harness self-tests `crash-test`, `panic-test`, `stall-test`, `timeout-test` |
 | `TWW_MILESTONE` | exit 0 when this milestone (M0-M14 names: `static-init`, `aurora-up`, `heaps`, ...) is logged |
 | `TWW_TIMEOUT_S`, `TWW_STALL_S` | watchdog: exit 10 after this long; exit 11 when the game frame counter is frozen this long (0/unset: off) |
