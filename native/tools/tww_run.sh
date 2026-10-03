@@ -40,7 +40,9 @@
 #                    e.g. sea:44:206 (Outset, where the new game starts)
 #   --shot LIST      TWW_SHOT, game frames whose presented image is saved as shot-<frame>.png in
 #                    the run directory, e.g. 30,200 (TWW_SHOT_EVERY=n in the environment: every
-#                    n-th frame; TWW_SHOT_DIR: another directory)
+#                    n-th frame; TWW_SHOT_DIR: another directory). A run with shots compiles each
+#                    pipeline before its first draw (TWW_SYNC_PIPELINES, default on with shots), so
+#                    a shot never misses a draw whose pipeline was still compiling
 #   --build          run `ninja -C build/native-mac tww` first
 #   --exe PATH       the executable (default build/native-mac/tww)
 #   --run-dir DIR    put the run in DIR (created; must not exist yet) instead of
