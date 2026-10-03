@@ -55,6 +55,8 @@ include(cmake/modules.cmake)
 include(cmake/Aurora.cmake)
 # tww_sdk, the TWW-specific SDK over Aurora, and its headless test tww_sdk_smoke (with Aurora only).
 include(cmake/sdk.cmake)
+# TWW's GF sources (native/tww/src/dolphin/gf) compiled into tww_sdk (with Aurora only).
+include(cmake/sdk_gf.cmake)
 # Link census (phase 2): `ninja tww_link_census` lists what the non-REL units still need.
 include(cmake/census.cmake)
 
