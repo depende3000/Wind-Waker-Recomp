@@ -49,7 +49,10 @@
 #   --run-dir DIR    put the run in DIR (created; must not exist yet) instead of
 #                    build/native-mac/runs/<target>-<timestamp>
 #   --quiet          do not print the tail of the log on failure
-# Other TWW_* variables already in the environment are passed through.
+# Other TWW_* variables already in the environment are passed through. TWW_CACHE_PER_RUN=1 gives
+# the run its own Aurora caches in <run dir>/cache (TWW_CACHE_DIR) instead of the shared
+# build/native-mac/user/cache: its pipeline_cache.db then lists only the pipelines this run used
+# (native/tools/gen_pipeline_cache.sh).
 #
 # Exit codes (those of tww): 0 reached, 1 smoke check failed, 2 usage, 10 timeout, 11 stall,
 # 12 panic, 13 signal, 14 disc problem. If the process does not end within the timeout plus a
@@ -201,6 +204,7 @@ export TWW_TIMEOUT_S="$timeout_s"
 export TWW_STALL_S="$stall_s"
 export TWW_AUDIO="$audio"
 export TWW_RUN_DIR="$run_dir"
+[ "${TWW_CACHE_PER_RUN:-}" = 1 ] && export TWW_CACHE_DIR="$run_dir/cache"
 [ -n "$frames" ] && export TWW_FRAMES="$frames"
 if [ -n "$stage" ]; then export TWW_BOOT_STAGE="$stage"; else unset TWW_BOOT_STAGE; fi
 [ -n "$trace" ] && export TWW_TRACE="$trace"
