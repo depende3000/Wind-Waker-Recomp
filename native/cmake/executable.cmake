@@ -30,6 +30,12 @@ target_link_libraries(tww_pc PRIVATE tww_game_headers)
 target_include_directories(tww_pc PRIVATE "${TWW_NATIVE_ROOT}/src/pc")
 # pc_main.cpp (step 6.1) sets tww_sdk's thread hooks (tww_sdk/hooks.h); tww itself links tww_sdk.
 target_include_directories(tww_pc PRIVATE "${TWW_NATIVE_ROOT}/sdk/include")
+# pc_frame.cpp (step 6.2) reads Aurora's events (<aurora/event.h> includes SDL3's headers). Headers
+# only: tww links SDL3 through Aurora, and the link census bundle must not gain a library.
+if (DEFINED AURORA_SDL3_TARGET AND TARGET ${AURORA_SDL3_TARGET})
+    target_include_directories(tww_pc PRIVATE
+            $<TARGET_PROPERTY:${AURORA_SDL3_TARGET},INTERFACE_INCLUDE_DIRECTORIES>)
+endif ()
 if (TARGET tww_link_census)
     target_link_libraries(tww_link_census PRIVATE tww_pc)
 endif ()

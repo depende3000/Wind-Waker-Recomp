@@ -7,6 +7,8 @@
 #
 # <target> is a milestone (static-init, aurora-up, heaps, ... see TWW_MILESTONE) or a smoke test
 # (crash-test, ... see TWW_SMOKE). static-init is milestone M0 and runs the static-init smoke test.
+# `run` boots the game with neither: it ends with --frames (exit 0), the timeout or a fault, e.g.
+#   native/tools/tww_run.sh run --frames 600 [--uncapped]      (prints the [tww] pacing line)
 #
 # Options:
 #   --timeout S      in-process watchdog timeout (TWW_TIMEOUT_S), default 180
@@ -110,7 +112,9 @@ while [ -e "$run_dir" ]; do run_dir="$runs/$target-$ts-$n"; n=$((n + 1)); done
 mkdir -p "$run_dir"
 
 unset TWW_SMOKE TWW_MILESTONE
-if [[ "$milestones" == *" $target "* ]]; then
+if [ "$target" = "run" ]; then
+    : # the game itself: no milestone, no smoke test
+elif [[ "$milestones" == *" $target "* ]]; then
     export TWW_MILESTONE="$target"
     [ "$target" = "static-init" ] && export TWW_SMOKE=static-init
 else
