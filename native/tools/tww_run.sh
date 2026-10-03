@@ -16,7 +16,7 @@
 #   --frames N       exit 0 after N game frames (TWW_FRAMES)
 #   --trace LIST     trace channels (TWW_TRACE), e.g. res,scene
 #   --uncapped       TWW_UNCAPPED=1
-#   --audio on|off   TWW_AUDIO (default: off, until phase 5)
+#   --audio on|off   TWW_AUDIO (default: on since step 5.A, decision H10: JAudio and the DSP run)
 #   --disc PATH      TWW_DISC, default /Users/kevin/Documents/windwaker/GZLE01.iso
 #   --input PATH     TWW_INPUT, the controller script (step 6.3; a relative path is taken from the
 #                    current directory, else from the repository); pad-echo defaults to
@@ -67,7 +67,7 @@ stall_s=30
 frames=""
 trace="${TWW_TRACE:-}"
 uncapped="${TWW_UNCAPPED:-}"
-audio="${TWW_AUDIO:-off}"
+audio="${TWW_AUDIO:-on}"
 disc="${TWW_DISC:-/Users/kevin/Documents/windwaker/GZLE01.iso}"
 input="${TWW_INPUT:-}"
 do_build=0
