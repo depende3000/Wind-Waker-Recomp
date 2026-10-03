@@ -39,14 +39,18 @@ set_target_properties(tww_sdk_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE
 # the OS thread, mutex, message and alarm code must run race-free). Aurora's libraries are linked
 # uninstrumented, without aurora::dvd: it pulls in nod (Rust), and with it the TSan link on macOS
 # fails ("too many personality routines for compact unwind": C, C++, Objective-C and Rust). The
-# tests do not use DVD. Not part of `all`:
+# tests do not use DVD, except the DTK part of the "audio" test (step 2.6f): src/audio/DTK.cpp
+# drives Aurora's DVD stream commands, so it is left out here and TWW_SDK_SMOKE_NO_DVD skips that
+# part. Not part of `all`:
 #   ninja tww_sdk_smoke_tsan && build/native-mac/tww_sdk_smoke_tsan
 # On macOS 26.6 Xcode's clang 17 TSan runtime crashes at start-up; native/sdk/README.md
 # ("ThreadSanitizer run") builds it in build/native-mac-tsan with the Command Line Tools clang.
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" AND NOT CMAKE_CROSSCOMPILING)
-    add_executable(tww_sdk_smoke_tsan EXCLUDE_FROM_ALL ${TWW_SDK_SOURCES} ${TWW_SDK_SMOKE_SOURCES})
+    set(TWW_SDK_TSAN_SOURCES ${TWW_SDK_SOURCES})
+    list(FILTER TWW_SDK_TSAN_SOURCES EXCLUDE REGEX "/src/audio/DTK\\.cpp$")
+    add_executable(tww_sdk_smoke_tsan EXCLUDE_FROM_ALL ${TWW_SDK_TSAN_SOURCES} ${TWW_SDK_SMOKE_SOURCES})
     target_include_directories(tww_sdk_smoke_tsan PRIVATE "${TWW_SDK_ROOT}/include")
-    target_compile_definitions(tww_sdk_smoke_tsan PRIVATE MTX_USE_PS=1
+    target_compile_definitions(tww_sdk_smoke_tsan PRIVATE MTX_USE_PS=1 TWW_SDK_SMOKE_NO_DVD=1
             "TWW_AURORA_COMMIT_STR=\"${TWW_AURORA_COMMIT}\"")
     target_compile_options(tww_sdk_smoke_tsan PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
     target_link_options(tww_sdk_smoke_tsan PRIVATE -fsanitize=thread)
