@@ -15,6 +15,16 @@
 # - Phase 2 exit (step 2.9): link_census_unresolved.txt must equal
 #   native/check/expected_unresolved_phase2.txt (REL and JAudio/JAZel symbols only).
 #
+# Full symbol census (step 3.1): every object phase 3 links into one executable.
+#
+#   ninja tww_symbol_census  ->  build/native-mac/symbol_census.txt
+#
+# - Inputs: objects.txt (main.dol units), rel_objects.txt (REL units) and sdk_objects.txt
+#   (tww_sdk), all written at generate time into link_census/. tools/symbol_census.py --all lists
+#   duplicate strong definitions, weak definitions with differing sizes, and types defined in more
+#   than one source file (ODR suspects). A report only: it does not fail on what it finds;
+#   `symbol_census.py --all --dups` is the check that does (step 3.2).
+#
 # macOS only: it relies on ld64 bundles and the Xcode nm/otool. Not part of `all`.
 include_guard(GLOBAL)
 
@@ -102,6 +112,26 @@ set(_census_all_objects)
 foreach (_m IN LISTS _census_modules)
     list(APPEND _census_all_objects "$<TARGET_OBJECTS:${_m}>")
 endforeach ()
+
+# Full symbol census (step 3.1): main.dol units, REL units and tww_sdk.
+set(_symcensus_deps ${_census_modules} ${_census_all_objects}
+        "${_census_dir}/objects.txt" "${_census_dir}/rel_objects.txt"
+        "${_census_tools}/symbol_census.py")
+if (TARGET tww_sdk)
+    file(GENERATE OUTPUT "${_census_dir}/sdk_objects.txt"
+            CONTENT "$<JOIN:$<TARGET_OBJECTS:tww_sdk>,\n>\n")
+    list(APPEND _symcensus_deps tww_sdk "$<TARGET_OBJECTS:tww_sdk>" "${_census_dir}/sdk_objects.txt")
+else ()
+    file(REMOVE "${_census_dir}/sdk_objects.txt")
+endif ()
+add_custom_command(
+        OUTPUT "${CMAKE_BINARY_DIR}/symbol_census.txt"
+        COMMAND "${Python3_EXECUTABLE}" "${_census_tools}/symbol_census.py"
+                --all "${CMAKE_BINARY_DIR}" --out "${CMAKE_BINARY_DIR}/symbol_census.txt"
+        DEPENDS ${_symcensus_deps}
+        COMMENT "Symbol census of ${_census_n_kept} main.dol and ${_census_n_rel} REL units"
+        VERBATIM)
+add_custom_target(tww_symbol_census DEPENDS "${CMAKE_BINARY_DIR}/symbol_census.txt")
 
 set(_census_strict_arg)
 if (TWW_LINK_CENSUS_STRICT)
