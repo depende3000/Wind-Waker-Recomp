@@ -295,11 +295,12 @@ TWW_SMOKE=static-init build/native-mac/tww; echo $?
 | `tww_symbol_census` | no | `symbol_census.py --all` over every object, to `build/native-mac/symbol_census.txt` |
 | `tww_pc` | yes | The run harness (`native/src/pc/pc_*.cpp`), linked into `tww` and the link census |
 | `tww` | no | The game executable |
+| `tww_layout_check` | no | The GameCube offsets of the disc-mapped structs (`native/check/layout_headers.txt`) hold on the host, minus `layout_xfail.txt`, and the decomp's offset comments hold for the GameCube (`native/tools/layout_check.py`, step 4.0c) |
 
 Full check after a change, from a clean build directory:
 
 ```sh
-ninja -C build/native-mac -k 0 all tww_sdk_shadow_check tww_link_census tww_symbol_census tww
+ninja -C build/native-mac -k 0 all tww_sdk_shadow_check tww_link_census tww_symbol_census tww tww_layout_check
 build/native-mac/tww_sdk_smoke
 diff -u native/check/expected_unresolved_phase2.txt build/native-mac/link_census_unresolved.txt
 native/tools/symbol_census.py --all --dups
