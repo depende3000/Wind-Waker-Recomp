@@ -42,6 +42,12 @@ credits are preserved below and in [RIGHTS_AND_LICENSES.md](RIGHTS_AND_LICENSES.
 > **AI disclosure:** Wind Waker Recomp is developed with substantial AI assistance for code, testing,
 > documentation and debugging. The status log records what has actually been checked, and on what.
 
+> [!NOTE]
+> **Native port (work in progress).** This branch also holds a native build of the game from its
+> decompilation on [Aurora](https://github.com/encounter/aurora), in `native/`: it boots to the title
+> screen on Apple Silicon Macs. To build and run it, see the
+> [Quick start in native/README.md](native/README.md#quick-start-mac).
+
 **Questions or bugs?** Join the [Discord](https://discord.gg/xwHfUD2bxW) or
 [open an issue](https://github.com/elliotttate/Wind-Waker-Recomp/issues).
 
