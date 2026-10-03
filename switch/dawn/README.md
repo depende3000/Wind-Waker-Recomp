@@ -57,7 +57,10 @@ libc-only calls missing from devkitA64. One Dawn discovery patch permits the
 diagnostic to proceed without EGL robust-context support, and another
 recognizes EGL native-fence sync; if no EGL sync extension exists, a separate
 Switch-only queue patch serializes submissions with `glFinish`. The latter is
-diagnostic-only, slow, and does not support shared-fence export. The robustness
+diagnostic-only, slow, and does not support shared-fence export. For the native port,
+`dawn-switch-gl-fence-queue.patch` (applied after it) replaces that `glFinish` with GLES 3.0
+sync objects (`glFenceSync`, polled with `glClientWaitSync`), so the CPU no longer waits for the
+GPU at each submission; `TWW_SWITCH_GL_FINISH=1` in the environment restores the `glFinish`. The robustness
 bypass is paired with Dawn's `disable_robustness` device toggle. These changes
 do not add a Switch window surface or alter non-Switch builds, and neither
 fallback is appropriate for a real game/production build.
