@@ -382,3 +382,62 @@ TWW_SMOKE_TEST(alarms) {
     }
     return true;
 }
+
+// ---- launch and start hooks (step 6.1) -------------------------------------------------------
+
+namespace {
+
+thread_local std::uintptr_t tHookTag = 0; // stands in for the game's per-thread current JKRHeap
+OSThread sHooked;
+Stack sHookedStack;
+std::atomic<OSThread*> sLaunchThread{nullptr};
+std::atomic<OSThread*> sLaunchCaller{nullptr};
+std::atomic<OSThread*> sStartThread{nullptr};
+std::atomic<OSThread*> sStartCaller{nullptr};
+
+void* LaunchHook(OSThread* thread) {
+    sLaunchThread.store(thread);
+    sLaunchCaller.store(OSGetCurrentThread());
+    return AsMessage(tHookTag);
+}
+
+void StartHook(OSThread* thread, void* launchValue) {
+    sStartThread.store(thread);
+    sStartCaller.store(OSGetCurrentThread());
+    tHookTag = FromMessage(launchValue);
+}
+
+void* HookedThread(void*) {
+    return AsMessage(tHookTag); // what the start hook set on this thread
+}
+
+} // namespace
+
+TWW_SMOKE_TEST(thread_hooks) {
+    // The tests run on the process main thread, which runs as the default thread.
+    OSThread* self = OSGetCurrentThread();
+    TWW_SMOKE_CHECK(self == TWWSdkGetDefaultThread());
+
+    TWW_SMOKE_CHECK(TWWSdkSetThreadLaunchHook(LaunchHook) == nullptr);
+    TWW_SMOKE_CHECK(TWWSdkSetThreadStartHook(StartHook) == nullptr);
+    tHookTag = 0x1234;
+    TWW_SMOKE_CHECK(OSCreateThread(&sHooked, HookedThread, nullptr, sHookedStack.top(), kStackSize,
+                                   16, 0));
+    // Created suspended: no hook has run yet.
+    TWW_SMOKE_CHECK(sLaunchThread.load() == nullptr && sStartThread.load() == nullptr);
+    OSResumeThread(&sHooked);
+    // The launch hook ran inside OSResumeThread, on this thread.
+    TWW_SMOKE_CHECK(sLaunchThread.load() == &sHooked);
+    TWW_SMOKE_CHECK(sLaunchCaller.load() == self);
+    tHookTag = 0x5678; // the new thread keeps what this thread had at the resume
+    void* result = nullptr;
+    TWW_SMOKE_CHECK(OSJoinThread(&sHooked, &result));
+    TWW_SMOKE_CHECK(FromMessage(result) == 0x1234);
+    TWW_SMOKE_CHECK(sStartThread.load() == &sHooked);
+    TWW_SMOKE_CHECK(sStartCaller.load() == &sHooked);
+
+    TWW_SMOKE_CHECK(TWWSdkSetThreadLaunchHook(nullptr) == LaunchHook);
+    TWW_SMOKE_CHECK(TWWSdkSetThreadStartHook(nullptr) == StartHook);
+    tHookTag = 0;
+    return true;
+}
