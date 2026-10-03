@@ -16,6 +16,7 @@ struct Config {
     const char* milestone = nullptr; // TWW_MILESTONE
     const char* trace = nullptr;     // TWW_TRACE
     const char* runDir = nullptr;    // TWW_RUN_DIR
+    const char* input = nullptr;     // TWW_INPUT
     double timeoutS = 0;             // TWW_TIMEOUT_S, 0 = off
     double stallS = 0;               // TWW_STALL_S, 0 = off
     unsigned int frames = 0;         // TWW_FRAMES, 0 = off
@@ -82,6 +83,10 @@ int checkResFont(const char* test, const char* path, JUTResFont& font, const uin
 [[noreturn]] void smokeArcSweep();
 bool isKnownSmoke(const char* name);
 void printSmokes(int fd);
+
+// pc_input.cpp (step 6.3): reads the TWW_INPUT script (exit PC_EXIT_USAGE if it is malformed, or
+// if TWW_SMOKE=pad-echo has none).
+void loadInput();
 
 // pc_watchdog.cpp
 void startWatchdog();

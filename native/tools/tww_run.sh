@@ -18,6 +18,9 @@
 #   --uncapped       TWW_UNCAPPED=1
 #   --audio on|off   TWW_AUDIO (default: off, until phase 5)
 #   --disc PATH      TWW_DISC, default /Users/kevin/Documents/windwaker/GZLE01.iso
+#   --input PATH     TWW_INPUT, the controller script (step 6.3; a relative path is taken from the
+#                    current directory, else from the repository); pad-echo defaults to
+#                    native/check/input/pad-echo.txt
 #   --build          run `ninja -C build/native-mac tww` first
 #   --exe PATH       the executable (default build/native-mac/tww)
 #   --quiet          do not print the tail of the log on failure
@@ -64,6 +67,7 @@ trace="${TWW_TRACE:-}"
 uncapped="${TWW_UNCAPPED:-}"
 audio="${TWW_AUDIO:-off}"
 disc="${TWW_DISC:-/Users/kevin/Documents/windwaker/GZLE01.iso}"
+input="${TWW_INPUT:-}"
 do_build=0
 exe="$build/tww"
 quiet=0
@@ -77,6 +81,7 @@ while [ $# -gt 0 ]; do
         --uncapped) uncapped=1; shift ;;
         --audio) audio="$2"; shift 2 ;;
         --disc) disc="$2"; shift 2 ;;
+        --input) input="$2"; shift 2 ;;
         --build) do_build=1; shift ;;
         --exe) exe="$2"; shift 2 ;;
         --quiet) quiet=1; shift ;;
@@ -121,6 +126,14 @@ else
     export TWW_SMOKE="$target"
 fi
 export TWW_DISC="$disc"
+[ -z "$input" ] && [ "$target" = pad-echo ] && input="$repo/native/check/input/pad-echo.txt"
+if [ -n "$input" ]; then
+    case "$input" in
+        /*) ;;
+        *) if [ -f "$input" ]; then input="$(pwd)/$input"; else input="$repo/$input"; fi ;;
+    esac
+    export TWW_INPUT="$input"
+fi
 export TWW_TIMEOUT_S="$timeout_s"
 export TWW_STALL_S="$stall_s"
 export TWW_AUDIO="$audio"
