@@ -136,6 +136,7 @@ void pc_harness_init(int argc, char* argv[]) {
     gConfig.perfEvery = envCount("TWW_PERF_EVERY");
     gConfig.perfPath = envString("TWW_PERF");
     pc_aspect_init();
+    gConfig.hitchMs = envCount("TWW_HITCH_MS");
 
     writef(STDERR_FILENO,
            "[tww] harness: smoke=%s milestone=%s timeout=%gs stall=%gs frames=%u trace=%s "

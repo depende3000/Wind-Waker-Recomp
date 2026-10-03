@@ -223,11 +223,16 @@ tww_switch_use_clang("${TWW_REPO_ROOT}/native")
 # ---- The harness's Switch platform layer ---------------------------------------------------------------
 add_library(tww_switch_platform STATIC
         "${TWW_SWITCH_DIR}/source/tww_switch.cpp"
+        "${TWW_SWITCH_DIR}/source/tww_switch_stats.cpp"
         "${TWW_SWITCH_DIR}/source/thread_wrap.c"
         "${TWW_REPO_ROOT}/switch/source/common/usb_log.c")
 target_include_directories(tww_switch_platform PUBLIC "${TWW_SWITCH_DIR}/source"
         PRIVATE "${TWW_REPO_ROOT}/switch/source/common")
 target_link_libraries(tww_switch_platform PUBLIC nx)
+# tww_switch_stats.cpp reads Aurora's Switch counters (aurora/patches/0005), Dawn's GL queue
+# counters and the disc reader's (nod/), which the executable links.
+target_include_directories(tww_switch_platform PRIVATE "${TWW_SWITCH_AURORA_DIR}/include")
+target_link_libraries(tww_switch_platform PUBLIC aurora_gx webgpu_dawn tww_switch_nod)
 add_library(tww_switch_main STATIC "${TWW_SWITCH_DIR}/source/tww_switch_main.cpp")
 target_link_libraries(tww_switch_main PUBLIC tww_switch_platform)
 # The harness (tww_pc) calls the platform layer (pc_crash.cpp, pc_harness.cpp, pc_main.cpp).
