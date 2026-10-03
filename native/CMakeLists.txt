@@ -54,6 +54,8 @@ include(cmake/deferred.cmake)
 include(cmake/modules.cmake)
 # Aurora, the GameCube SDK over WebGPU (phase 2); already included by GameConfig.cmake.
 include(cmake/Aurora.cmake)
+# tww_dsp_hle, Dolphin's high-level DSP behind tww_sdk's DSP library (step 5.A, decision H6).
+include(cmake/dsp_hle.cmake)
 # tww_sdk, the TWW-specific SDK over Aurora, and its headless test tww_sdk_smoke.
 include(cmake/sdk.cmake)
 # TWW's GF sources (native/tww/src/dolphin/gf) compiled into tww_sdk.
