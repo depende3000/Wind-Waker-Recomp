@@ -72,7 +72,7 @@ Dusklight file it came from:
 - the TWW SDK layer `native/sdk/src` (phase 2): `os/OSThread.cpp`, `os/OSMutex.cpp`,
   `os/OSContext.cpp`, `os/OSInterrupt.cpp`, `os/OSMessage.cpp`, `os/OSReport.cpp`,
   `os/OSMisc.cpp`, `os/OSReset.cpp`, `os/OSSram.cpp`, `os/PPC.cpp`, `vi/VIRetrace.cpp`,
-  `gx/GXExtras.cpp`, `exi/EXI.cpp`, `audio/AIStubs.cpp` and `runtime/extras.c` (from Dusklight's
+  `gx/GXExtras.cpp`, `exi/EXI.cpp`, `audio/AI.cpp` and `runtime/extras.c` (from Dusklight's
   `src/dusk`), and `audio/DTK.cpp` (copied from `libs/dolphin/src/dtk/dtk.c`);
 - `TARGET_PC` changes to the decompilation in `native/tww` (phases 2 and 3): `src/c/c_dylink.cpp`
   and `src/DynamicLink.cpp` (the REL loader replaced by static linking), `src/f_pc/f_pc_profile.cpp`
