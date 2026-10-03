@@ -34,3 +34,24 @@ add_executable(tww_sdk_smoke ${TWW_SDK_SMOKE_SOURCES})
 target_link_libraries(tww_sdk_smoke PRIVATE tww_sdk)
 # The program sits at the top of the build directory: build/native-mac/tww_sdk_smoke.
 set_target_properties(tww_sdk_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# tww_sdk_smoke_tsan: the same tests and tww_sdk sources built with ThreadSanitizer (step 2.6a:
+# the OS thread, mutex, message and alarm code must run race-free). Aurora's libraries are linked
+# uninstrumented, without aurora::dvd: it pulls in nod (Rust), and with it the TSan link on macOS
+# fails ("too many personality routines for compact unwind": C, C++, Objective-C and Rust). The
+# tests do not use DVD. Not part of `all`:
+#   ninja tww_sdk_smoke_tsan && build/native-mac/tww_sdk_smoke_tsan
+# On macOS 26.6 Xcode's clang 17 TSan runtime crashes at start-up; native/sdk/README.md
+# ("ThreadSanitizer run") builds it in build/native-mac-tsan with the Command Line Tools clang.
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" AND NOT CMAKE_CROSSCOMPILING)
+    add_executable(tww_sdk_smoke_tsan EXCLUDE_FROM_ALL ${TWW_SDK_SOURCES} ${TWW_SDK_SMOKE_SOURCES})
+    target_include_directories(tww_sdk_smoke_tsan PRIVATE "${TWW_SDK_ROOT}/include")
+    target_compile_definitions(tww_sdk_smoke_tsan PRIVATE MTX_USE_PS=1
+            "TWW_AURORA_COMMIT_STR=\"${TWW_AURORA_COMMIT}\"")
+    target_compile_options(tww_sdk_smoke_tsan PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+    target_link_options(tww_sdk_smoke_tsan PRIVATE -fsanitize=thread)
+    set(TWW_SDK_TSAN_LIBS ${TWW_AURORA_LIBS})
+    list(REMOVE_ITEM TWW_SDK_TSAN_LIBS aurora::dvd)
+    target_link_libraries(tww_sdk_smoke_tsan PRIVATE ${TWW_SDK_TSAN_LIBS})
+    set_target_properties(tww_sdk_smoke_tsan PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif ()
