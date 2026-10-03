@@ -267,8 +267,9 @@ TWW_SMOKE=static-init build/native-mac/tww; echo $?
 - `TWW_SMOKE=static-init` (step 3.9) makes `main` stop before any SDK initialisation: reaching it
   proves every static constructor (main.dol, REL, audio and Aurora) ran, and it checks the profile
   list (`g_fpcPf_ProfileList_p`, the NULL terminator, `mProcName == i`, `fpcPf_Get(i)`). It leaves
-  with `_Exit`, without the game's static destructors. Running `tww` without `TWW_SMOKE` enters the
-  game's `main`, which is not expected to work before phases 4 to 6.
+  with `_Exit`, without the game's static destructors. Since step 6.0 it lives in the run harness
+  (`native/src/pc/pc_smoke.cpp`, see "Running `tww` (phase 6)" below). Running `tww` without
+  `TWW_SMOKE` enters the game's `main`, which is not expected to work before phases 4 to 6.
 - `native/check/expected_unresolved_phase2.txt` and the symbol census stay the link checks: the
   census over every object reports 0 duplicate strong definitions, 0 weak data size mismatches, 0
   weak definitions overridden by a strong one and 0 types defined in more than one source file
@@ -292,6 +293,7 @@ TWW_SMOKE=static-init build/native-mac/tww; echo $?
 | `tww_sdk_smoke_tsan` | no | The same under ThreadSanitizer |
 | `tww_link_census` | no | Links the main.dol units with `-undefined dynamic_lookup` and lists what they still need |
 | `tww_symbol_census` | no | `symbol_census.py --all` over every object, to `build/native-mac/symbol_census.txt` |
+| `tww_pc` | yes | The run harness (`native/src/pc/pc_*.cpp`), linked into `tww` and the link census |
 | `tww` | no | The game executable |
 
 Full check after a change, from a clean build directory:
@@ -301,5 +303,50 @@ ninja -C build/native-mac -k 0 all tww_sdk_shadow_check tww_link_census tww_symb
 build/native-mac/tww_sdk_smoke
 diff -u native/check/expected_unresolved_phase2.txt build/native-mac/link_census_unresolved.txt
 native/tools/symbol_census.py --all --dups
-TWW_SMOKE=static-init build/native-mac/tww
+native/tools/tww_run.sh static-init
 ```
+
+## Running `tww` (phase 6)
+
+Step 6.0 of `docs/NATIVE_PORT_PHASE4_6.md`: a run harness in `native/src/pc` (the static library
+`tww_pc`, globbed by `native/cmake/executable.cmake`; API in `native/include/pc/pc_harness.h`).
+The game's `main` calls `pc_harness_init` first under `TARGET_PC`: it reads the environment,
+installs the crash handler and the watchdog, runs a smoke test that needs no SDK (and exits),
+then checks the disc.
+
+```sh
+native/tools/tww_run.sh static-init               # milestone M0 -> exit 0
+native/tools/tww_run.sh <milestone|smoke> [--timeout 180] [--stall 30] [--trace res,scene] ...
+TWW_DISC=/nonexistent build/native-mac/tww; echo $?   # 14
+```
+
+| Variable | Meaning |
+| --- | --- |
+| `TWW_DISC` | the GZLE01 revision 0 `.iso` (required to boot; `tww_run.sh` defaults it to `/Users/kevin/Documents/windwaker/GZLE01.iso`, never committed) |
+| `TWW_SMOKE` | a smoke test: `static-init`, and the harness self-tests `crash-test`, `panic-test`, `stall-test`, `timeout-test` |
+| `TWW_MILESTONE` | exit 0 when this milestone (M0-M14 names: `static-init`, `aurora-up`, `heaps`, ...) is logged |
+| `TWW_TIMEOUT_S`, `TWW_STALL_S` | watchdog: exit 10 after this long; exit 11 when the game frame counter is frozen this long (0/unset: off) |
+| `TWW_TRACE` | `res` (every path through `my_DVDConvertPathToEntrynum`), `scene` (every scene process created), `all` |
+| `TWW_FRAMES` | exit 0 after this many game frames |
+| `TWW_UNCAPPED`, `TWW_AUDIO` | frame pacing off (step 6.2); `off` keeps audio silent (step 6.1, phase 5) |
+| `TWW_RUN_DIR` | where `backtrace.txt` and `stall.txt` go (set by `tww_run.sh`) |
+
+Exit codes: 0 reached, 1 smoke check failed, 2 usage error, 10 timeout, 11 stall, 12 panic
+(`OSPanic`, which `JUT_ASSERT` ends in), 13 signal, 14 disc problem. Milestones are logged as
+`[tww] MILESTONE <name> frame= retrace= ms=`.
+
+- Crash handler (`pc_crash.cpp`): `sigaction` for SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP and
+  SIGABRT. It prints the fault address (with a hint when it is below 4 GiB, i.e. in macOS arm64's
+  `__PAGEZERO`: a pointer truncated to 32 bits), the scene, frame, retrace count and last resource,
+  the registers, the image load address and a `backtrace_symbols_fd` backtrace of the faulting
+  context; `tww_run.sh` appends `atos` file:line names to `backtrace.txt`. On PC `OSPanic` prints
+  the same through `pc_panic` instead of walking the PowerPC back chain.
+- Watchdog (`pc_watchdog.cpp`): on a stall it suspends the other threads and writes their
+  frame-pointer backtraces to `stall.txt` (`sample` needs developer mode).
+- `tww_run.sh` writes `build/native-mac/runs/<target>-<timestamp>/` (`command.txt`, `env.txt`,
+  `run.log`, `exit_code.txt`, `backtrace.txt`, `stall.txt`), checks the disc's `main.dol` SHA-1
+  on first use (cached in `runs/disc_check.txt`), and kills the process if it outlives the
+  timeout by 30 s.
+- `native/tools/lldb_crash.sh` reruns under `lldb --batch` with the inherited environment. With
+  developer mode off it exits 3 without starting lldb, which would wait for an authorisation
+  prompt.

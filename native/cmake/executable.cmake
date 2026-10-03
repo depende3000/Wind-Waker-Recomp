@@ -15,6 +15,19 @@
 # - Needs Aurora (tww_sdk) and every module; skipped otherwise. Not part of `all`.
 include_guard(GLOBAL)
 
+# The run harness (docs/NATIVE_PORT_PHASE4_6.md, step 6.0): native/src/pc/pc_*.cpp, globbed into
+# the static library tww_pc (API: native/include/pc/pc_harness.h). Compiled like the game units
+# (tww_game_headers), since pc_smoke.cpp reads game state. Game units call into it under TARGET_PC,
+# so the link census bundle links it too: its symbols must not show up as unresolved.
+file(GLOB _pc_sources CONFIGURE_DEPENDS "${TWW_NATIVE_ROOT}/src/pc/pc_*.cpp")
+list(SORT _pc_sources)
+add_library(tww_pc STATIC ${_pc_sources})
+target_link_libraries(tww_pc PRIVATE tww_game_headers)
+target_include_directories(tww_pc PRIVATE "${TWW_NATIVE_ROOT}/src/pc")
+if (TARGET tww_link_census)
+    target_link_libraries(tww_link_census PRIVATE tww_pc)
+endif ()
+
 if (NOT TARGET tww_sdk)
     message(STATUS "tww_native: executable tww disabled (needs TWW_WITH_AURORA=ON, i.e. tww_sdk)")
     return()
@@ -95,7 +108,7 @@ endforeach ()
 add_executable(tww EXCLUDE_FROM_ALL "${_exe_dir}/tww_exe_stub.c")
 add_dependencies(tww ${TWW_MODULES})
 target_link_options(tww PRIVATE "@${_exe_rsp}")
-target_link_libraries(tww PRIVATE tww_sdk aurora::main)
+target_link_libraries(tww PRIVATE tww_pc tww_sdk aurora::main)
 set_target_properties(tww PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         # The game is C++: link with the C++ driver, so libc++/libc++abi resolve the C++ runtime.
