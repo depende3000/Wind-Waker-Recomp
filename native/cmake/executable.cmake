@@ -137,7 +137,12 @@ endforeach ()
 add_executable(tww EXCLUDE_FROM_ALL "${_exe_dir}/tww_exe_stub.c")
 add_dependencies(tww ${TWW_MODULES})
 target_link_options(tww PRIVATE "@${_exe_rsp}")
-target_link_libraries(tww PRIVATE tww_pc tww_sdk aurora::main)
+# The process entry point: aurora::main, whose main calls the game's (aurora_main). A platform
+# build may set TWW_EXE_ENTRY to its own entry library first (the Switch build, switch/native).
+if (NOT TWW_EXE_ENTRY)
+    set(TWW_EXE_ENTRY aurora::main)
+endif ()
+target_link_libraries(tww PRIVATE tww_pc tww_sdk ${TWW_EXE_ENTRY})
 set_target_properties(tww PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         # The game is C++: link with the C++ driver, so libc++/libc++abi resolve the C++ runtime.
